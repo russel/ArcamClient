@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <menu id='application_menu'>
+    <item>
+      <attribute name='label' translatable='yes'>_About ArcamClient</attribute>
+      <attribute name='action'>win.about</attribute>
+      <attribute name='accel'>&lt;Primary&gt;a</attribute>
+    </item>
+  </menu>
+</interface>

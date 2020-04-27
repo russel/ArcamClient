@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   width="701.86792mm"
+   height="386.38409mm"
+   viewBox="0 0 701.86792 386.38409"
+   version="1.1"
+   id="svg8"
+   inkscape:version="0.92.5 (2060ec1f9f, 2020-04-08)"
+   sodipodi:docname="arcamclient.svg">
+  <defs
+     id="defs2" />
+  <sodipodi:namedview
+     id="base"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageopacity="0.0"
+     inkscape:pageshadow="2"
+     inkscape:zoom="0.28316322"
+     inkscape:cx="998.20624"
+     inkscape:cy="749.77075"
+     inkscape:document-units="mm"
+     inkscape:current-layer="layer1"
+     showgrid="false"
+     inkscape:window-width="1779"
+     inkscape:window-height="836"
+     inkscape:window-x="64"
+     inkscape:window-y="55"
+     inkscape:window-maximized="0" />
+  <metadata
+     id="metadata5">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <dc:title></dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(-7.4516505,-9.4032555)">
+    <g
+       id="surface1"
+       transform="matrix(0.35277777,0,0,0.35277777,5.4314467,9.4032555)">
+      <path
+         id="path4567"
+         d="M 507.01562,66.371094 V 180.97656 c 9.69922,0 18.51172,0 25.1875,0 31.60547,0 69.88282,-9.3164 69.88282,-55.66406 0.14453,-16.42187 -6.56641,-32.160156 -18.51953,-43.417969 -11.95313,-11.261719 -28.0586,-17.023437 -44.4375,-15.902343 H 507.01562 M 1768.6172,270.26953 C 1819.7383,184.88281 1869.3516,92.691406 1919.7188,1.257812 l 75.5546,411.074218 h -75.5546 l -32.3594,-184.25 -115.3438,186.64453 c -1.2539,0.19922 -2.3828,0.875 -3.1484,1.88672 L 1649.6211,230.47266 C 1635.8945,289.16016 1625.4453,351 1613.3555,412.33203 H 1541.957 L 1617.5117,3.652344 Z M 1072.1484,30.226562 V 110.07422 C 1038.2773,86.019531 1000.5,67.757812 957.30859,68.765625 743.24609,73.925781 809.22656,479.33203 1071.5195,302.25781 v 79.97656 c -36.5156,23.67579 -109.55075,42.1875 -152.36325,33.625 C 654.72266,363.46875 720.83203,-4.28125 952.01953,0.25 993.57422,1.007812 1037.0156,5.917969 1072.1484,30.476562 M 572.37109,0 c 70.38672,0 110.30469,54.027344 110.30469,116.11719 0,43.70312 -25.18359,101.88672 -83.35937,111.08203 L 707.23047,412.33203 H 614.17578 L 507.77344,228.96094 c -0.26953,0.46875 -0.26953,1.04297 0,1.51172 V 412.33203 H 425.92578 V 0 Z M 370.89844,412.33203 H 289.55078 C 276.96094,382.23437 252.91016,324.17187 252.91016,324.17187 H 127.61719 L 92.109375,412.33203 H 5.726562 C 38.214844,335.25781 62.894531,278.70703 90.472656,215.23437 120.56641,146.21875 148.14453,84.757812 186.04687,1.890625 Z M 153.17969,261.20312 h 73.28515 L 188.69141,179.71875 Z M 1486.5547,412.33203 h -80.8438 c -12.5898,-30.09766 -36.6406,-88.16016 -36.6406,-88.16016 h -125.164 l -35.6368,88.16016 h -86.2578 c 32.4883,-77.07422 57.168,-133.625 84.7461,-197.09766 29.9688,-69.01562 58.1758,-130.476558 95.9531,-213.343745 z M 1268.7109,261.20312 h 73.4102 l -37.7734,-81.48437 z m 0,0"
+         style="fill:#0f0f0f;fill-opacity:1;fill-rule:nonzero;stroke:none"
+         inkscape:connector-curvature="0" />
+    </g>
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:50.79999924px;line-height:6.61458302px;font-family:'Blokletters Viltstift';-inkscape-font-specification:'Blokletters Viltstift, Bold';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-feature-settings:normal;text-align:center;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:middle;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.26458332px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+       x="357.86929"
+       y="382.02902"
+       id="text4582"><tspan
+         sodipodi:role="line"
+         id="tspan4580"
+         x="357.86929"
+         y="382.02902"
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:211.66667175px;font-family:'Blokletters Viltstift';-inkscape-font-specification:'Blokletters Viltstift, Bold';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-feature-settings:normal;text-align:center;writing-mode:lr-tb;text-anchor:middle;stroke-width:0.26458332px;fill:#43caca;fill-opacity:1">Client</tspan></text>
+  </g>
+</svg>

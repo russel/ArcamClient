@@ -1,0 +1,31 @@
+[package]
+name = "arcamclient"
+version = "0.0.0"
+authors = ["Russel Winder <russel@winder.org.uk>"]
+categories = ["desktop applications"]
+keywords = ["Arcam", "amplifier", "remote", "control"]
+license = "GPL-3.0"
+description = "arcamclient is a Rust/gtk-rs/GTK+ desktop application to control an Arcam amplifier over the Ethernet connection."
+readme = "README.md"
+edition = "2018"
+
+[dependencies]
+ctor = "*"
+#gdk = "*"
+gdk-pixbuf = "*"
+gio = "*"
+glib = {version="*", features=["v2_48"]}
+gtk = {version="*", features=["v3_18"]}
+lazy_static = "*"
+num-traits = "*"
+num-derive = "*"
+rand = "*"
+
+[dev-dependencies]
+#quickcheck = "*"
+#proptest = "*"
+#rstest = "*"
+
+#[[test]]
+#name = "MOCK_AVR850"
+#harness = false
