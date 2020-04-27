@@ -24,3 +24,6 @@
 //use gtk;
 //use gtk::prelude::*;
 
+pub fn send_to_amp(packet: &[u8]) {
+
+}

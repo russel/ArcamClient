@@ -26,18 +26,14 @@ mod about;
 mod arcam_protocol;
 mod comms_manager;
 mod control_window;
+mod functionality;
 
 #[cfg(not(test))]
 fn main() {
     let application = gtk::Application::new(Some("uk.org.russel.arcamclient"), gio::ApplicationFlags::empty()).expect("Application creation failed");
     glib::set_application_name("ArcamClient");
     application.connect_startup(move |app| {
-        //let (to_control_window, from_comms_manager) = glib::MainContext::channel::<control_window::Message>(glib::PRIORITY_DEFAULT);
         let _control_window = control_window::ControlWindow::new(&app); //, from_comms_manager);
-        //thread::spawn({
-        //    let t_c_w = to_control_window.clone();
-        //    move ||{ comms_manager::run(t_c_w); }
-        //});
     });
     // Get a glib-gio warning if activate is not handled.
     application.connect_activate(move |_| { });
