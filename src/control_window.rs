@@ -27,10 +27,13 @@ use gtk;
 use gtk::prelude::*;
 
 use crate::about;
+use crate::comms_manager;
 use crate::functionality;
 
 pub struct ControlWindow {
     window: gtk::ApplicationWindow,
+    address: gtk::Entry,
+    connect: gtk::CheckButton,
     brightness: gtk::Label,
     zone_1_adjustment: gtk::Adjustment,
     zone_1_mute: gtk::CheckButton,
@@ -55,41 +58,94 @@ impl ControlWindow {
         header_bar.set_show_close_button(true);
         let menu_button = gtk::MenuButton::new();
         menu_button.set_image(Some(&gtk::Image::new_from_icon_name(Some("open-menu-symbolic"), gtk::IconSize::Button.into())));
-        let brightness: gtk::Label = builder.get_object::<gtk::Label>("brightness").unwrap();
-        let zone_1_adjustment: gtk::Adjustment = builder.get_object("zone1_adjustment").unwrap();
-        let zone_1_mute: gtk::CheckButton = builder.get_object("zone1_mute").unwrap();
-        let zone_2_adjustment: gtk::Adjustment = builder.get_object("zone2_adjustment").unwrap();
-        let zone_2_mute: gtk::CheckButton = builder.get_object("zone2_mute").unwrap();
+        let address: gtk::Entry = builder.get_object("address").unwrap();
+        let connect: gtk::CheckButton = builder.get_object("connect").unwrap();
+        connect.connect_toggled({
+            let w = window.clone();
+            let a = address.clone();
+            move |button| {
+                // NB this is the state after the UI activity that caused the event that called the closure.
+                if button.get_active() {
+                    match a.get_text() {
+                        Some(a) => {
+                            if a.len() == 0 {
+                                let dialogue = gtk::MessageDialog::new(
+                                    Some(&w),
+                                    gtk::DialogFlags::MODAL,
+                                    gtk::MessageType::Info,
+                                    gtk::ButtonsType::Ok,
+                                    "Empty string as address, not connecting.",
+                                );
+                                dialogue.run();
+                                dialogue.destroy();
+                                button.set_active(false);
+                            } else {
+                                let address = a.as_ref();
+                                let connection = comms_manager::make_connection(address, 50000);
+                                {
+                                    let connection_made = comms_manager::connect_to(address);
+                                    if connection_made {
+                                        functionality::initialise_control_window();
+                                    }
+                                } else {
+                                    let dialogue = gtk::MessageDialog::new(
+                                        Some(&w),
+                                        gtk::DialogFlags::MODAL,
+                                        gtk::MessageType::Info,
+                                        gtk::ButtonsType::Ok,
+                                        &format!("Failed to connect to {:?}", address)
+                                    );
+                                    dialogue.run();
+                                    dialogue.destroy();
+                                    button.set_active(false);
+                                }
+                            }
+                        },
+                        None => {
+                            let dialogue = gtk::MessageDialog::new(
+                                Some(&w),
+                                gtk::DialogFlags::MODAL,
+                                gtk::MessageType::Info,
+                                gtk::ButtonsType::Ok,
+                                "No address to connect to."
+                            );
+                            dialogue.run();
+                            dialogue.destroy();
+                            button.set_active(false);
+                        },
+                    };
+                } else {
+                    //  TODO Disconnect from a connected to amplifier.
+                }
+            }
+        });
+        let brightness: gtk::Label = builder.get_object("brightness").unwrap();
+        let zone_1_adjustment: gtk::Adjustment = builder.get_object("zone_1_adjustment").unwrap();
+        let zone_1_mute: gtk::CheckButton = builder.get_object("zone_1_mute").unwrap();
+        let zone_2_adjustment: gtk::Adjustment = builder.get_object("zone_2_adjustment").unwrap();
+        let zone_2_mute: gtk::CheckButton = builder.get_object("zone_2_mute").unwrap();
         let menu_builder = gtk::Builder::new_from_string(include_str!("resources/application_menu.xml"));
         let application_menu: gio::Menu = menu_builder.get_object("application_menu").unwrap();
         let about_action = gio::SimpleAction::new("about", None);
+        about_action.connect_activate({
+            let w = window.clone();
+            move |_, _| about::present(Some(&w))
+        });
         window.add_action(&about_action);
         menu_button.set_menu_model(Some(&application_menu));
         header_bar.pack_end(&menu_button);
         window.set_titlebar(Some(&header_bar));
         window.show_all();
-        let control_window = Rc::new(ControlWindow {
+        Rc::new(ControlWindow {
             window,
+            address,
+            connect,
             brightness,
             zone_1_adjustment,
             zone_1_mute,
             zone_2_adjustment,
             zone_2_mute,
-        });
-        about_action.connect_activate({
-            let c_w = control_window.clone();
-            move |_, _| about::present(Some(&c_w.window))
-        });
-        control_window.initialise_control_window();
-        control_window
-    }
-
-    fn initialise_control_window(self: &Self) {
-        functionality::get_brightness_from_amp();
-        functionality::get_zone_1_volume_from_amp();
-        functionality::get_zone_1_mute_from_amp();
-        functionality::get_zone_2_volume_from_amp();
-        functionality::get_zone_2_mute_from_amp();
+        })
     }
 
     pub fn set_brightness(self: &Self, level: u8) {

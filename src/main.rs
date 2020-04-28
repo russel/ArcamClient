@@ -33,7 +33,7 @@ fn main() {
     let application = gtk::Application::new(Some("uk.org.russel.arcamclient"), gio::ApplicationFlags::empty()).expect("Application creation failed");
     glib::set_application_name("ArcamClient");
     application.connect_startup(move |app| {
-        let _control_window = control_window::ControlWindow::new(&app); //, from_comms_manager);
+        let _control_window = control_window::ControlWindow::new(&app);
     });
     // Get a glib-gio warning if activate is not handled.
     application.connect_activate(move |_| { });

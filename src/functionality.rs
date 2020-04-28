@@ -51,3 +51,11 @@ pub fn set_zone_2_volume_on_amp(value: f64) {
     assert!(volume < 100);
     send_to_amp(&create_request(ZoneNumber::Two, Command::SetRequestVolume, &[volume]).unwrap());
 }
+
+pub fn initialise_control_window() {
+    get_brightness_from_amp();
+    get_zone_1_volume_from_amp();
+    get_zone_1_mute_from_amp();
+    get_zone_2_volume_from_amp();
+    get_zone_2_mute_from_amp();
+}
