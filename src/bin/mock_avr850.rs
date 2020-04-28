@@ -18,13 +18,11 @@
  */
 
 /*!
-A program to simulate a AVR850 so that integration tests of the Arcam
-client can be undertaken.
+A program to simulate a AVR850 so that integration tests of the Arcam client can be undertaken.
 
-The process opens port 50000 and listens for TCP packets using the Arcam IR remote
-control protocol. Replies to queries must be sent within three seconds of the request
-being received. NB This is an asynchronous question/answer system not a synchronous
-one.
+The process opens port 50000 and listens for TCP packets using the Arcam IR remote control
+protocol. Replies to queries must be sent within three seconds of the request being received. NB
+This is an asynchronous question/answer system not a synchronous one.
 */
 
 use std::cell::Cell;
@@ -44,6 +42,7 @@ use arcamclient::arcam_protocol::{
 struct ZoneState {
     power: Cell<bool>,
     volume: Cell<u8>,
+    mute: Cell<bool>,
 }
 
 /// The state of a mock AVR.
@@ -59,13 +58,13 @@ impl Default for AmpState {
             zones: HashMap::new(),
             brightness: Cell::new(1), // TODO Values 0, 1, and 2 are the only ones allowed.
         };
-        amp_state.zones.insert(ZoneNumber::One, ZoneState{power: Cell::new(true), volume: Cell::new(30)});
-        amp_state.zones.insert(ZoneNumber::Two, ZoneState{power: Cell::new(false), volume: Cell::new(30)});
+        amp_state.zones.insert(ZoneNumber::One, ZoneState{power: Cell::new(true), volume: Cell::new(30), mute: Cell::new(false)});
+        amp_state.zones.insert(ZoneNumber::Two, ZoneState{power: Cell::new(false), volume: Cell::new(30), mute: Cell::new(true)});
         amp_state
     }
 }
 
-/// Given a request, create a response updating the state of the mock amp as needed.
+/// Return a response to a given request updating the state of the mock amp as needed.
 fn create_command_response(zone: ZoneNumber, cc: Command, values: &[u8], amp_state: &mut AmpState) -> Result<Vec<u8>, String>{
     match cc {
         Command::DisplayBrightness =>
@@ -135,7 +134,11 @@ fn handle_client(stream: &mut TcpStream, amp_state: &mut AmpState) {
     }
 }
 
-/// Create the mock amplifier and then the connection listener on the address provided.
+/// Create a mock amplifier and then listen for connections on the address provided.
+///
+/// Although a real AVR850 will only listen on port 50000, this simulator allows for any port to
+/// support integration testing – tests may have to run faster than ports become available so
+/// reusing the same port is not feasible.
 fn create_default_amp_then_listen_on(address: &SocketAddr) -> Result<(), ()> {
     let mut amp_state: AmpState = Default::default();
     match TcpListener::bind(address) {
@@ -160,10 +163,11 @@ fn create_default_amp_then_listen_on(address: &SocketAddr) -> Result<(), ()> {
 ///
 /// A real AVR850 only listens on port 50000, but this mock is allowed to listen on any port
 /// in order to support integration testing where using a single port number can lead to
-/// problems as a socket may not be closed as fast as new mocks are created.
+/// problems as a socket may not be closed as fast as new mocks are created. Testing must
+/// avoid "Unable to bind socket: Address already in use".
 fn main() -> Result<(), ()>{
     let args: Vec<String> = args().collect();
-    eprintln!("####  mock_avr850: args are {:?}", args);
+    println!("####  mock_avr850: args are {:?}", args);
     let default_port_number = 50000;
     let port_number = if args.len() > 1 { args[1].parse::<u16>().unwrap_or(default_port_number) } else { default_port_number };
     create_default_amp_then_listen_on(&SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port_number))
