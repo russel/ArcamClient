@@ -33,7 +33,7 @@ struct CommsManager {
     istream: gio::PollableInputStream,
 }
 
-pub fn send_to_amp(manage: &CommsManager, packet: &[u8]) {
+pub fn send_to_amp(packet: &[u8]) {
     eprintln!("Send packet to amp {:?}", packet);
 }
 

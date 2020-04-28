@@ -80,13 +80,20 @@ impl ControlWindow {
                                 dialogue.destroy();
                                 button.set_active(false);
                             } else {
-                                let address = a.as_ref();
-                                let connection = comms_manager::make_connection(address, 50000);
-                                {
-                                    let connection_made = comms_manager::connect_to(address);
-                                    if connection_made {
-                                        functionality::initialise_control_window();
-                                    }
+                                let address: &str = a.as_ref();
+                                //  TODO Set up connection and put future onto the GTK event loop.
+                                //    For now just say something pending getting the code in place.
+                                if true {
+                                    let dialogue = gtk::MessageDialog::new(
+                                        Some(&w),
+                                        gtk::DialogFlags::MODAL,
+                                        gtk::MessageType::Info,
+                                        gtk::ButtonsType::Ok,
+                                        &format!("Connected to {:?}", address)
+                                    );
+                                    dialogue.run();
+                                    dialogue.destroy();
+                                    button.set_active(false);
                                 } else {
                                     let dialogue = gtk::MessageDialog::new(
                                         Some(&w),
