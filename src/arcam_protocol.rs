@@ -171,20 +171,32 @@ All requests are structured:
 - Data: the parameters for the response of length n. n is limited to 255
 - Et (End transmission): PACKET_END
 */
-pub fn parse_request(packet: &[u8]) -> Result<(ZoneNumber, Command, Vec<u8>), &'static str> {
-    if packet[0] != PACKET_START { return Err("First byte is not the start of packet marker."); }
-    if packet[packet.len() - 1] != PACKET_END { return Err("Final byte is not the end of packet marker."); }
-    let length = packet.len();
-    let packet = &packet[1 .. (length - 1)];
-    assert_eq!(packet.len(), length - 2);
-    if packet.len() < 4 { return Err("Insufficient bytes to form a valid packet."); }
-    let zone= FromPrimitive::from_u8(packet[0]).unwrap();
-    let cc= FromPrimitive::from_u8(packet[1]).unwrap();
-    let dl = packet[2] as usize;
-    if packet.len() != dl + 3 { return Err("Data length byte and actual length of the data do not agree."); }
-    let data = packet[3..].to_vec();
-    assert_eq!(data.len(), dl as usize);
-    Ok((zone, cc, data))
+pub fn parse_request(packet: &[u8]) -> Result<(ZoneNumber, Command, Vec<u8>, usize), &'static str> {
+    let packet_length = packet.len();
+    if packet_length < 5 { return Err("Insufficient bytes to form a packet."); }
+    let mut index = 0;
+    if packet[index] != PACKET_START { return Err("First byte is not the start of packet marker."); }
+    index += 1;
+    if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+    let zone = FromPrimitive::from_u8(packet[index]).unwrap();
+    index += 1;
+    if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+    let cc = FromPrimitive::from_u8(packet[index]).unwrap();
+    index += 1;
+    if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+    let dl = packet[index] as usize;
+    index += 1;
+    if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+    let end_index = index + dl;
+    assert_eq!(end_index, packet_length - 1);
+    if end_index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+    let data = &packet[index..end_index];
+    assert_eq!(data.len(), dl);
+    index = end_index;
+    if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+    if packet[index] != PACKET_END { return Err("Final byte is not the end of packet marker."); }
+    index += 1;
+    Ok((zone, cc, Vec::from(data), index))
 }
 
 /**
@@ -200,21 +212,35 @@ All responses are structured;
 - Data: the parameters for the response of length n. n is limited to 255
 - Et (End transmission): PACKET_END
 */
-pub fn parse_response(packet: &[u8]) -> Result<(ZoneNumber, Command, AnswerCode, Vec<u8>), &'static str> {
-    if packet[0] != PACKET_START { return Err("First byte is not the start of packet marker."); }
-    if packet[packet.len() - 1] != PACKET_END { return Err("Final byte is not the end of packet marker."); }
-    let length = packet.len();
-    let packet = &packet[1 .. (length - 1)];
-    assert_eq!(packet.len(), length - 2);
-    if packet.len() < 5 { return Err("Insufficient bytes to form a valid packet."); }
-    let zone = FromPrimitive::from_u8(packet[0]).unwrap();
-    let cc= FromPrimitive::from_u8(packet[1]).unwrap();
-    let ac= FromPrimitive::from_u8(packet[2]).unwrap();
-    let dl = packet[3] as usize;
-    if packet.len() != dl + 4 { return Err("Data length byte and actual length of the data do not agree."); }
-    let data = packet[4..].to_vec();
-    assert_eq!(data.len(), dl as usize);
-    Ok((zone, cc, ac, data))
+pub fn parse_response(packet: &[u8]) -> Result<(ZoneNumber, Command, AnswerCode, Vec<u8>, usize), &'static str> {
+    let packet_length = packet.len();
+    if packet_length < 6 { return Err("Insufficient bytes to form a packet."); }
+    let mut index = 0;
+    if packet[index] != PACKET_START { return Err("First byte is not the start of packet marker."); }
+    index += 1;
+    if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+    let zone = FromPrimitive::from_u8(packet[index]).unwrap();
+    index += 1;
+    if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+    let cc = FromPrimitive::from_u8(packet[index]).unwrap();
+    index += 1;
+    if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+    let ac = FromPrimitive::from_u8(packet[index]).unwrap();
+    index += 1;
+    if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+    let dl = packet[index] as usize;
+    index += 1;
+    if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+    let end_index = index + dl;
+    assert_eq!(end_index, packet_length - 1);
+    if end_index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+    let data = &packet[index..end_index];
+    assert_eq!(data.len(), dl);
+    index = end_index;
+    if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+    if packet[index] != PACKET_END { return Err("Final byte is not the end of packet marker."); }
+    index += 1;
+    Ok((zone, cc, ac, Vec::from(data), index))
 }
 
 #[cfg(test)]
@@ -251,7 +277,7 @@ mod tests {
     #[test]
     fn parse_valid_set_volume_request() {
         let mut request = create_request(ZoneNumber::One, Command::SetRequestVolume, &mut [20]).unwrap();
-        assert_eq!(parse_request(&mut request).unwrap(), (ZoneNumber::One, Command::SetRequestVolume, vec![0x14]));
+        assert_eq!(parse_request(&mut request).unwrap(), (ZoneNumber::One, Command::SetRequestVolume, vec![0x14], 6));
     }
 
     #[test]
@@ -292,7 +318,7 @@ mod tests {
     fn parse_valid_display_brightness_response() {
         match parse_response(
             &create_response(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, &[0x01]).unwrap()) {
-            Ok(value) => assert_eq!(value, (ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![0x01])),
+            Ok(value) => assert_eq!(value, (ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![0x01], 7)),
             Err(_) => assert!(false),
         }
     }
