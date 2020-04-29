@@ -71,7 +71,7 @@ fn get_default_brightness() {
     ) {
         Ok(buffer) => assert_eq!(
             parse_response(&buffer).unwrap(),
-            (ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![1])),
+            (ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![1], 7)),
         Err(e) => assert!(false, e),
     };
 }

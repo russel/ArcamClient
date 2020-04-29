@@ -101,7 +101,7 @@ fn handle_client(stream: &mut TcpStream, amp_state: &mut AmpState) {
                     if data[0] == PACKET_START {
                         println!("####  mock_avr850: processing Arcam request {:?}", data);
                         match parse_request(data) {
-                            Ok((zone, cc, values)) => {
+                            Ok((zone, cc, values, count)) => {
                                 stream.write(&create_command_response(zone, cc, &values, amp_state).unwrap())
                                     .expect("####  mock_avr850: failed to write response");
                             },
