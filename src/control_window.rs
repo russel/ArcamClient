@@ -17,6 +17,7 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use gio;
@@ -39,6 +40,7 @@ pub struct ControlWindow {
     zone_1_mute: gtk::CheckButton,
     zone_2_adjustment: gtk::Adjustment,
     zone_2_mute: gtk::CheckButton,
+    pub socket_client: RefCell<Option<comms_manager::SocketClient>>, // Required in functionality.
 }
 
 impl ControlWindow {
@@ -60,72 +62,6 @@ impl ControlWindow {
         menu_button.set_image(Some(&gtk::Image::new_from_icon_name(Some("open-menu-symbolic"), gtk::IconSize::Button.into())));
         let address: gtk::Entry = builder.get_object("address").unwrap();
         let connect: gtk::CheckButton = builder.get_object("connect").unwrap();
-        connect.connect_toggled({
-            let w = window.clone();
-            let a = address.clone();
-            move |button| {
-                // NB this is the state after the UI activity that caused the event that called the closure.
-                if button.get_active() {
-                    match a.get_text() {
-                        Some(a) => {
-                            if a.len() == 0 {
-                                let dialogue = gtk::MessageDialog::new(
-                                    Some(&w),
-                                    gtk::DialogFlags::MODAL,
-                                    gtk::MessageType::Info,
-                                    gtk::ButtonsType::Ok,
-                                    "Empty string as address, not connecting.",
-                                );
-                                dialogue.run();
-                                dialogue.destroy();
-                                button.set_active(false);
-                            } else {
-                                let address: &str = a.as_ref();
-                                //  TODO Set up connection and put future onto the GTK event loop.
-                                //    For now just say something pending getting the code in place.
-                                if true {
-                                    let dialogue = gtk::MessageDialog::new(
-                                        Some(&w),
-                                        gtk::DialogFlags::MODAL,
-                                        gtk::MessageType::Info,
-                                        gtk::ButtonsType::Ok,
-                                        &format!("Connected to {:?}", address)
-                                    );
-                                    dialogue.run();
-                                    dialogue.destroy();
-                                    button.set_active(false);
-                                } else {
-                                    let dialogue = gtk::MessageDialog::new(
-                                        Some(&w),
-                                        gtk::DialogFlags::MODAL,
-                                        gtk::MessageType::Info,
-                                        gtk::ButtonsType::Ok,
-                                        &format!("Failed to connect to {:?}", address)
-                                    );
-                                    dialogue.run();
-                                    dialogue.destroy();
-                                    button.set_active(false);
-                                }
-                            }
-                        },
-                        None => {
-                            let dialogue = gtk::MessageDialog::new(
-                                Some(&w),
-                                gtk::DialogFlags::MODAL,
-                                gtk::MessageType::Info,
-                                gtk::ButtonsType::Ok,
-                                "No address to connect to."
-                            );
-                            dialogue.run();
-                            dialogue.destroy();
-                            button.set_active(false);
-                        },
-                    };
-                } else {
-                    //  TODO Disconnect from a connected to amplifier.
-                }
-            }
-        });
         let brightness: gtk::Label = builder.get_object("brightness").unwrap();
         let zone_1_adjustment: gtk::Adjustment = builder.get_object("zone_1_adjustment").unwrap();
         let zone_1_mute: gtk::CheckButton = builder.get_object("zone_1_mute").unwrap();
@@ -143,7 +79,7 @@ impl ControlWindow {
         header_bar.pack_end(&menu_button);
         window.set_titlebar(Some(&header_bar));
         window.show_all();
-        Rc::new(ControlWindow {
+        let control_window = Rc::new(ControlWindow {
             window,
             address,
             connect,
@@ -152,7 +88,65 @@ impl ControlWindow {
             zone_1_mute,
             zone_2_adjustment,
             zone_2_mute,
-        })
+            socket_client: RefCell::new(None),
+        });
+        control_window.connect.connect_toggled({
+            let c_w = control_window.clone();
+            move |button| {
+                // NB this is the state after the UI activity that caused the event that called the closure.
+                if button.get_active() {
+                    match c_w.address.get_text() {
+                        Some(address) => {
+                            if address.len() == 0 {
+                                let dialogue = gtk::MessageDialog::new(
+                                    Some(&c_w.window),
+                                    gtk::DialogFlags::MODAL,
+                                    gtk::MessageType::Info,
+                                    gtk::ButtonsType::Ok,
+                                    "Empty string as address, not connecting.",
+                                );
+                                dialogue.run();
+                                dialogue.destroy();
+                                button.set_active(false);
+                            } else {
+                                let address: &str = address.as_ref();
+                                //  TODO Set up connection and put future onto the GTK event loop.
+                                //    For now just say something pending getting the code in place.
+                                eprintln!("Try and connect to {}", address);
+                                button.set_active(false);
+                            }
+                        }
+                        None => {
+                            let dialogue = gtk::MessageDialog::new(
+                                Some(&c_w.window),
+                                gtk::DialogFlags::MODAL,
+                                gtk::MessageType::Info,
+                                gtk::ButtonsType::Ok,
+                                "No address to connect to."
+                            );
+                            dialogue.run();
+                            dialogue.destroy();
+                            button.set_active(false);
+                        },
+                    };
+                } else {
+                    //  TODO Disconnect from a connected to amplifier.
+                }
+            }
+        });
+        control_window.zone_1_mute.connect_toggled({
+            let c_w = control_window.clone();
+            move |button| {
+                functionality::set_zone_1_mute_on_amp(&c_w, button.get_active())
+            }
+        });
+        control_window.zone_2_mute.connect_toggled({
+            let c_w = control_window.clone();
+            move |button| {
+                functionality::set_zone_2_mute_on_amp(&c_w, button.get_active())
+            }
+        });
+        control_window
     }
 
     pub fn set_brightness(self: &Self, level: u8) {
@@ -182,4 +176,5 @@ impl ControlWindow {
         assert!(volume < 100);
         self.zone_2_adjustment.set_value(volume as f64);
     }
+
 }

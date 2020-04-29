@@ -11,6 +11,7 @@ edition = "2018"
 
 [dependencies]
 ctor = "*"
+futures = "*"
 #gdk = "*"
 gdk-pixbuf = "*"
 gio = "*"
