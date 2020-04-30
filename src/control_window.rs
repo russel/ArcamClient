@@ -34,13 +34,13 @@ use crate::functionality;
 pub struct ControlWindow {
     window: gtk::ApplicationWindow,
     address: gtk::Entry,
-    connect: gtk::CheckButton,
+    pub connect: gtk::CheckButton, // Access required in comms_manager.
     brightness: gtk::Label,
     zone_1_adjustment: gtk::Adjustment,
     zone_1_mute: gtk::CheckButton,
     zone_2_adjustment: gtk::Adjustment,
     zone_2_mute: gtk::CheckButton,
-    pub socket_client: RefCell<Option<comms_manager::SocketClient>>, // Required in functionality.
+    pub socket_connection: RefCell<Option<comms_manager::SocketConnection>>, // Access required in functionality and comms_manager,
 }
 
 impl ControlWindow {
@@ -88,7 +88,7 @@ impl ControlWindow {
             zone_1_mute,
             zone_2_adjustment,
             zone_2_mute,
-            socket_client: RefCell::new(None),
+            socket_connection: RefCell::new(None),
         });
         control_window.connect.connect_toggled({
             let c_w = control_window.clone();
@@ -110,10 +110,9 @@ impl ControlWindow {
                                 button.set_active(false);
                             } else {
                                 let address: &str = address.as_ref();
-                                //  TODO Set up connection and put future onto the GTK event loop.
-                                //    For now just say something pending getting the code in place.
-                                eprintln!("Try and connect to {}", address);
-                                button.set_active(false);
+                                eprintln!("Connect to {}:50000", address);
+                                //  TODO Fixme
+                                //glib::MainContext::default().spawn_local(comms_manager::initialise_socket_and_listen_for_packets_from_amp(&c_w, address, 50000));
                             }
                         }
                         None => {
@@ -130,7 +129,9 @@ impl ControlWindow {
                         },
                     };
                 } else {
-                    //  TODO Disconnect from a connected to amplifier.
+                    eprintln!("Terminate connection to amp.");
+                    //  TODO Fixme
+                    //glib::MainContext::default().spawn_local(comms_manager::terminate_connection(&c_w));
                 }
             }
         });
@@ -151,7 +152,7 @@ impl ControlWindow {
 
     pub fn set_brightness(self: &Self, level: u8) {
         assert!(level < 4);
-        let mut brightness_label= if level == 0 { "Off".to_string() } else { "Level ".to_string() + &level.to_string() };
+        let brightness_label= if level == 0 { "Off".to_string() } else { "Level ".to_string() + &level.to_string() };
         self.brightness.set_text(&brightness_label);
     }
 

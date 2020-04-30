@@ -247,7 +247,6 @@ pub fn parse_response(packet: &[u8]) -> Result<(ZoneNumber, Command, AnswerCode,
 mod tests {
     use super::*;
 
-    use num_derive::FromPrimitive;
     use num_traits::FromPrimitive;
 
     #[test]

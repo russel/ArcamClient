@@ -17,20 +17,22 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::collections::LinkedList;
-use std::error::Error;
+use std::rc::Rc;
 
 use gio;
 use gio::prelude::*;
 use glib;
 //use glib::prelude::*;
 //use gtk;
-//use gtk::prelude::*;
+use gtk::prelude::*;
 
-use crate::arcam_protocol::parse_response;
-use crate::functionality::process_response;
+use crate::arcam_protocol;
+use crate::control_window::ControlWindow;
+use crate::functionality;
 
 /*
+ * ================================================================================
+  *
  *  Proposal from Sebastian Dröge  to provide a more Rust-y API to GIO sockets in gtk-rs.
  */
 
@@ -39,6 +41,8 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use futures::{AsyncRead, AsyncWrite};
+use futures_util::io::AsyncReadExt;
+use futures_util::io::AsyncWriteExt;
 
 pub struct SocketClient(gio::SocketClient);
 
@@ -108,41 +112,29 @@ impl AsyncWrite for SocketConnection {
 
 /*
  *  End of proposal.
+ *
+ * ================================================================================
  */
 
-pub async fn initialise_socket(address: &str, port_number: u16) -> Result<SocketClient, glib::Error> {
-    let socket_client = SocketClient::new();
+pub async fn initialise_socket_and_listen_for_packets_from_amp(control_window: &Rc<ControlWindow>, address: &str, port_number: u16) -> Result<(), glib::Error> {
+   let socket_client = SocketClient::new();
     let address =  gio::NetworkAddress::new(address, port_number);
-    let result = socket_client.connect(&address).await?;
-    //  TODO Set background of the address to green.
-    Ok(socket_client)
-}
-
-pub fn send_to_amp(socket_client: &SocketClient, packet: &[u8]) -> Result<(), glib::Error> {
-    eprintln!("Send packet to amp {:?}", packet);
-    //client.write_all(packet).await?;
-    Ok(())
-}
-
-pub async fn listen_for_packets_from_amp(socket_client: &SocketClient) -> Result<(), glib::Error> {
-    // Whenever bytes arrive add them to the end of a queue and see if
-    // a try_parse on the start of the queue succeeds. If it doesn't leave stuff as is.
-    // if there is success deal with the GUI change and remove the bytes from the
-    // queue.
+    let socket_connection = socket_client.connect(&address).await?;
+    *control_window.socket_connection.borrow_mut() = Some(socket_connection);
+    if !control_window.connect.get_active() { control_window.connect.set_active(true); }
     let mut queue: Vec<u8> = vec![];
     let mut buffer = [0u8; 256];
     loop {
-        let count = 0; // client.read(&mut buffer).await?;
+        //  TODO Fixme.
+        let count = 0; // (*control_window.socket_connection.borrow()).unwrap().read(&mut buffer).await?;
         if count == 0 { break; }
         for i in 0..count {
             queue.push(buffer[i]);
         }
-        match parse_response(&queue) {
+        match arcam_protocol::parse_response(&queue) {
             Ok((zone, cc, ac, data, count)) => {
-                for i in 0..count {
-                    queue.pop();
-                }
-                process_response(zone, cc, ac, &data);
+                for _ in 0..count { queue.pop(); }
+                functionality::process_response(control_window, zone, cc, ac, &data);
             },
             Err(e) => {
                 match e {
@@ -152,11 +144,27 @@ pub async fn listen_for_packets_from_amp(socket_client: &SocketClient) -> Result
             },
         }
     }
+    *control_window.socket_connection.borrow_mut() = None;
+    if control_window.connect.get_active() { control_window.connect.set_active(false); }
     Ok(())
 }
 
 /// Terminate the current connection.
-pub fn terminate_connection(socket_client: &SocketClient) {
+pub async fn terminate_connection(control_window: &Rc<ControlWindow>) -> Result<(), glib::Error> {
+    if (*control_window.socket_connection.borrow_mut()).is_some() {
+        eprintln!("Closing current connection.")
+        //  TODO Fixme.
+        // (*control_window.socket_connection.borrow_mut()).unwrap().connection.close(None).await?;
+    } else {
+        eprintln!("Attempted to close a not open connection.");
+    }
+    Ok(())
 }
 
+pub async fn send_to_amp(control_window: &Rc<ControlWindow>, packet: &[u8]) -> Result<(), glib::Error> {
+    eprintln!("Send packet to amp {:?}", packet);
+    //  TODO Fixme.
+    //(*control_window.socket_connection.borrow_mut()).unwrap().connection.write_all(packet).await?;
+    Ok(())
+}
 

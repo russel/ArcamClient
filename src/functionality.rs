@@ -19,29 +19,31 @@
 
 use std::rc::Rc;
 
+use glib;
+//use glib::prelude::*;
 use gtk;
 use gtk::prelude::*;
 
 use crate::arcam_protocol::{AnswerCode, Command, ZoneNumber, create_request};
-use crate::comms_manager::{SocketClient, send_to_amp};
+use crate::comms_manager::send_to_amp;
 use crate::control_window::ControlWindow;
+use glib::MainContext;
 
 fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[u8]) {
-    match &*control_window.socket_client.borrow() {
-        Some(s_c) => {
-            send_to_amp(&s_c, request);
-        },
-        None => {
-            let dialogue = gtk::MessageDialog::new(
-                None::<&gtk::Window>,
-                gtk::DialogFlags::MODAL,
-                gtk::MessageType::Info,
-                gtk::ButtonsType::Ok,
-                "Not connected to an amplifier."
-            );
-            dialogue.run();
-            dialogue.destroy();
-        },
+    if (*control_window.socket_connection.borrow_mut()).is_some() {
+        eprintln!("Send message to amp {:?}", request);
+        //  TODO Fixme
+        //glib::MainContext::default().spawn_local(send_to_amp(control_window, request));
+    } else {
+        let dialogue = gtk::MessageDialog::new(
+            None::<&gtk::Window>,
+            gtk::DialogFlags::MODAL,
+            gtk::MessageType::Info,
+            gtk::ButtonsType::Ok,
+            "Not connected to an amplifier."
+        );
+        dialogue.run();
+        dialogue.destroy();
     }
 }
 
@@ -93,11 +95,18 @@ pub fn initialise_control_window(control_window: &Rc<ControlWindow>) {
     get_zone_2_mute_from_amp(control_window);
 }
 
-pub fn process_response(zone: ZoneNumber, cc: Command, ac: AnswerCode, value: &[u8]) {
+pub fn process_response(control_window: &Rc<ControlWindow>, zone: ZoneNumber, cc: Command, ac: AnswerCode, value: &[u8]) {
     assert_eq!(ac, AnswerCode::StatusUpdate);
     match cc {
-        Command::DisplayBrightness => {},
-        Command::SetRequestVolume => {},
+        Command::DisplayBrightness => control_window.set_brightness(value[0]),
+        Command::SetRequestVolume => match zone {
+            ZoneNumber::One => control_window.set_zone_1_volume(value[0]),
+            ZoneNumber::Two => control_window.set_zone_2_volume(value[0]),
+        },
+        Command::RequestMuteStatus => match zone {
+            ZoneNumber::One => control_window.set_zone_1_mute(value[0]),
+            ZoneNumber::Two => control_window.set_zone_2_mute(value[0]),
+        }
         _ => {},
     };
 }
