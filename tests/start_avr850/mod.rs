@@ -27,17 +27,17 @@ use rand;
 use rand::Rng;
 
 static mut MOCK_AVR850: Option<process::Child> = None;
-pub static mut portNumber: u16 = 0;
+pub static mut PORT_NUMBER: u16 = 0;
 
 #[ctor]
 fn start_mock_avr850() {
     let mut rng = rand::thread_rng();
     unsafe {
-        portNumber = rng.gen_range(50001, 65535);
-        eprintln!("==== start_mockavr850: starting the process using port {}", portNumber);
+        PORT_NUMBER = rng.gen_range(50001, 65535);
+        eprintln!("==== start_mockavr850: starting the process using port {}", PORT_NUMBER);
     }
     match process::Command::new("cargo")
-        .args(&["run", "--bin", "mock_avr850", unsafe { &portNumber.to_string() }])
+        .args(&["run", "--bin", "mock_avr850", unsafe { &PORT_NUMBER.to_string() }])
         .spawn() {
         Ok(m) => {
             unsafe { MOCK_AVR850 = Some(m); }
