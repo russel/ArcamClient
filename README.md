@@ -1,6 +1,6 @@
 # ArcamClient
 
-This gtk-rs based Rust application is to control an Arcam AVR amplifier or AV receiver over an Ethernet
+A gtk-rs based Rust application to control an Arcam AVR amplifier or AV receiver over an Ethernet
 connection.
 
 [![Build status](https://gitlab.com/Russel/arcamclient/badges/master/build.svg)](https://gitlab.com/Russel/arcamclient)

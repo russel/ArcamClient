@@ -1,0 +1,16 @@
+sudo: true
+dist: xenial
+language: rust
+
+before_install:
+  - export RUST_BACKTRACE=1
+
+before_script:
+  - sudo apt-get -qq update
+  - sudo apt-get install -y libgtk-3-dev xvfb
+#  - sudo apt-get install -y libgstreamer-plugins-bad1.0-dev
+
+script:
+  - cargo build
+  - xvfb-run cargo test
+  - cargo build --release
