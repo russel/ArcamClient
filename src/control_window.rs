@@ -109,10 +109,11 @@ impl ControlWindow {
                                 dialogue.destroy();
                                 button.set_active(false);
                             } else {
-                                let address: &str = address.as_ref();
-                                eprintln!("Connect to {}:50000", address);
-                                //  TODO Fixme
-                                //glib::MainContext::default().spawn_local(comms_manager::initialise_socket_and_listen_for_packets_from_amp(&c_w, address, 50000));
+                                let address = address;
+                                eprintln!("Connect to {}:50000", &address);
+                                glib::MainContext::default().spawn_local(
+                                    comms_manager::initialise_socket_and_listen_for_packets_from_amp(
+                                        c_w.clone(), address.to_string(), 50000));
                             }
                         }
                         None => {
@@ -130,8 +131,7 @@ impl ControlWindow {
                     };
                 } else {
                     eprintln!("Terminate connection to amp.");
-                    //  TODO Fixme
-                    //glib::MainContext::default().spawn_local(comms_manager::terminate_connection(&c_w));
+                    glib::MainContext::default().spawn_local(comms_manager::terminate_connection(c_w.clone()));
                 }
             }
         });

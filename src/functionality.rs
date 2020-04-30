@@ -32,8 +32,7 @@ use glib::MainContext;
 fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[u8]) {
     if (*control_window.socket_connection.borrow_mut()).is_some() {
         eprintln!("Send message to amp {:?}", request);
-        //  TODO Fixme
-        //glib::MainContext::default().spawn_local(send_to_amp(control_window, request));
+        glib::MainContext::default().spawn_local(send_to_amp(control_window.clone(), request.to_vec()));
     } else {
         let dialogue = gtk::MessageDialog::new(
             None::<&gtk::Window>,
@@ -96,17 +95,25 @@ pub fn initialise_control_window(control_window: &Rc<ControlWindow>) {
 }
 
 pub fn process_response(control_window: &Rc<ControlWindow>, zone: ZoneNumber, cc: Command, ac: AnswerCode, value: &[u8]) {
+    // TODO Deal with non-StatusUpdate packets.
     assert_eq!(ac, AnswerCode::StatusUpdate);
     match cc {
-        Command::DisplayBrightness => control_window.set_brightness(value[0]),
-        Command::SetRequestVolume => match zone {
-            ZoneNumber::One => control_window.set_zone_1_volume(value[0]),
-            ZoneNumber::Two => control_window.set_zone_2_volume(value[0]),
+        Command::DisplayBrightness => {
+            assert_eq!(value.len(), 1);
+            control_window.set_brightness(value[0])
         },
-        Command::RequestMuteStatus => match zone {
-            ZoneNumber::One => control_window.set_zone_1_mute(value[0]),
-            ZoneNumber::Two => control_window.set_zone_2_mute(value[0]),
-        }
+        Command::SetRequestVolume => {
+            assert_eq!(value.len(), 1);
+            match zone {
+                ZoneNumber::One => control_window.set_zone_1_volume(value[0]),
+                ZoneNumber::Two => control_window.set_zone_2_volume(value[0]),
+            }},
+        Command::RequestMuteStatus => {
+            assert_eq!(value.len(), 1);
+            match zone {
+                ZoneNumber::One => control_window.set_zone_1_mute(value[0]),
+                ZoneNumber::Two => control_window.set_zone_2_mute(value[0]),
+            }},
         _ => {},
     };
 }

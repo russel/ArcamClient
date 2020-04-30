@@ -116,17 +116,24 @@ impl AsyncWrite for SocketConnection {
  * ================================================================================
  */
 
-pub async fn initialise_socket_and_listen_for_packets_from_amp(control_window: &Rc<ControlWindow>, address: &str, port_number: u16) -> Result<(), glib::Error> {
+pub async fn initialise_socket_and_listen_for_packets_from_amp(control_window: Rc<ControlWindow>, address: String, port_number: u16) {
    let socket_client = SocketClient::new();
-    let address =  gio::NetworkAddress::new(address, port_number);
-    let socket_connection = socket_client.connect(&address).await?;
-    *control_window.socket_connection.borrow_mut() = Some(socket_connection);
+    let address =  gio::NetworkAddress::new(address.as_ref(), port_number);
+    match socket_client.connect(&address).await {
+        Ok(s) => *control_window.socket_connection.borrow_mut() = Some(s),
+        Err(_) => return,
+    }
     if !control_window.connect.get_active() { control_window.connect.set_active(true); }
     let mut queue: Vec<u8> = vec![];
     let mut buffer = [0u8; 256];
     loop {
-        //  TODO Fixme.
-        let count = 0; // (*control_window.socket_connection.borrow()).unwrap().read(&mut buffer).await?;
+        let count = match (*control_window.socket_connection.borrow_mut()).as_mut().unwrap().read(&mut buffer).await {
+           Ok(s) => s,
+            Err(e) => {
+                eprintln!("Failed to read.");
+                0
+            },
+        };
         if count == 0 { break; }
         for i in 0..count {
             queue.push(buffer[i]);
@@ -134,7 +141,7 @@ pub async fn initialise_socket_and_listen_for_packets_from_amp(control_window: &
         match arcam_protocol::parse_response(&queue) {
             Ok((zone, cc, ac, data, count)) => {
                 for _ in 0..count { queue.pop(); }
-                functionality::process_response(control_window, zone, cc, ac, &data);
+                functionality::process_response(&control_window, zone, cc, ac, &data);
             },
             Err(e) => {
                 match e {
@@ -145,26 +152,24 @@ pub async fn initialise_socket_and_listen_for_packets_from_amp(control_window: &
         }
     }
     *control_window.socket_connection.borrow_mut() = None;
-    if control_window.connect.get_active() { control_window.connect.set_active(false); }
-    Ok(())
+    if control_window.connect.get_active() { control_window.connect.set_active(false); };
 }
 
 /// Terminate the current connection.
-pub async fn terminate_connection(control_window: &Rc<ControlWindow>) -> Result<(), glib::Error> {
+pub async fn terminate_connection(control_window: Rc<ControlWindow>) {
     if (*control_window.socket_connection.borrow_mut()).is_some() {
-        eprintln!("Closing current connection.")
-        //  TODO Fixme.
-        // (*control_window.socket_connection.borrow_mut()).unwrap().connection.close(None).await?;
+        eprintln!("Closing current connection.");
+        match (*control_window.socket_connection.borrow_mut()).as_mut().unwrap().close().await {
+            Ok(s) => {},
+            Err(e) => eprintln!("Failed to close the connection: {:?}", e),
+        };
     } else {
         eprintln!("Attempted to close a not open connection.");
-    }
-    Ok(())
+    };
 }
 
-pub async fn send_to_amp(control_window: &Rc<ControlWindow>, packet: &[u8]) -> Result<(), glib::Error> {
+pub async fn send_to_amp(control_window: Rc<ControlWindow>, packet: Vec<u8>) {
     eprintln!("Send packet to amp {:?}", packet);
-    //  TODO Fixme.
-    //(*control_window.socket_connection.borrow_mut()).unwrap().connection.write_all(packet).await?;
-    Ok(())
+    (*control_window.socket_connection.borrow_mut()).as_mut().unwrap().write_all(&packet).await;
 }
 
