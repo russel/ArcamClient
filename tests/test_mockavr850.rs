@@ -29,7 +29,7 @@ use arcamclient::arcam_protocol::{
 };
 
 fn connect_mock_avr850_send_and_receive(send_data: &[u8]) -> Result<Vec<u8>, String> {
-    let port_number: u16 = unsafe { start_avr850::portNumber };
+    let port_number: u16 = unsafe { start_avr850::PORT_NUMBER };
     match TcpStream::connect(SocketAddr::from(([127, 0, 0, 1], port_number))) {
         Ok(mut stream) => {
             match stream.write(send_data) {
@@ -47,10 +47,10 @@ fn connect_mock_avr850_send_and_receive(send_data: &[u8]) -> Result<Vec<u8>, Str
                         Err(e) => Err(format!("Failed to read: {:?}", e)),
                     }
                 },
-                Err(e) => Err("Could not send message to mock AVR850".to_string()),
+                Err(e) => Err(format!("Could not send message to mock AVR850: {:?}", e)),
             }
         },
-        Err(e) => Err("Could not connect to mock AVR850.".to_string()),
+        Err(e) => Err(format!("Could not connect to mock AVR850: {:?}", e)),
     }
 }
 
