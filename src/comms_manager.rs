@@ -76,6 +76,7 @@ impl SocketClient {
     }
 }
 
+#[derive(Debug)]
 pub struct SocketConnection {
     connection: gio::SocketConnection,
     read: gio::InputStreamAsyncRead<gio::PollableInputStream>,
@@ -117,20 +118,31 @@ impl AsyncWrite for SocketConnection {
  */
 
 pub async fn initialise_socket_and_listen_for_packets_from_amp(control_window: Rc<ControlWindow>, address: String, port_number: u16) {
-   let socket_client = SocketClient::new();
-    let address =  gio::NetworkAddress::new(address.as_ref(), port_number);
-    match socket_client.connect(&address).await {
+    // TODO Why is this output to stderr not output? Is it because the code is not
+    //   executed or because stderr is problematic?
+    eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp: trying to connect to {}:{}", address, port_number);
+    let socket_client = SocketClient::new();
+    match socket_client.connect(&gio::NetworkAddress::new(address.as_ref(), port_number)).await {
         Ok(s) => *control_window.socket_connection.borrow_mut() = Some(s),
-        Err(_) => return,
-    }
+        Err(_) => {
+            eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp: failed to connect to {}:{}", address, port_number);
+            return;
+        },
+    };
+    eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp: connected to {}:{}", address, port_number);
     if !control_window.connect.get_active() { control_window.connect.set_active(true); }
     let mut queue: Vec<u8> = vec![];
     let mut buffer = [0u8; 256];
+    eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp: entering listen loop for {}:{}", address, port_number);
     loop {
+        //  TODO Find a way of having the blocking read without keeping the mutable borrow open.
         let count = match (*control_window.socket_connection.borrow_mut()).as_mut().unwrap().read(&mut buffer).await {
-           Ok(s) => s,
+           Ok(s) => {
+               eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp: got a packet: {:?}", &buffer[..s]);
+               s
+           },
             Err(e) => {
-                eprintln!("Failed to read.");
+                eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp:fFailed to read.");
                 0
             },
         };
@@ -158,18 +170,20 @@ pub async fn initialise_socket_and_listen_for_packets_from_amp(control_window: R
 /// Terminate the current connection.
 pub async fn terminate_connection(control_window: Rc<ControlWindow>) {
     if (*control_window.socket_connection.borrow_mut()).is_some() {
-        eprintln!("Closing current connection.");
+        eprintln!("$$$$  terminate_connection: closing current connection.");
         match (*control_window.socket_connection.borrow_mut()).as_mut().unwrap().close().await {
             Ok(s) => {},
-            Err(e) => eprintln!("Failed to close the connection: {:?}", e),
+            Err(e) => eprintln!("$$$$  terminate_connection: failed to close the connection: {:?}", e),
         };
     } else {
-        eprintln!("Attempted to close a not open connection.");
+        eprintln!("$$$$  terminate_connection: attempted to close a not open connection.");
     };
 }
 
 pub async fn send_to_amp(control_window: Rc<ControlWindow>, packet: Vec<u8>) {
-    eprintln!("Send packet to amp {:?}", packet);
-    (*control_window.socket_connection.borrow_mut()).as_mut().unwrap().write_all(&packet).await;
+    eprintln!("$$$$  send_to_amp: send packet to amp {:?}", packet);
+    match (*control_window.socket_connection.borrow_mut()).as_mut().unwrap().write_all(&packet).await {
+        Ok(s) => {},
+        Err(e) => eprintln!("$$$$  send_to_amp: failed to send ot the amp on the connection: {:?}", e),
+    }
 }
-

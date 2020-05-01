@@ -31,15 +31,16 @@ use crate::about;
 use crate::comms_manager;
 use crate::functionality;
 
+// Integration tests require all fields to be public.
 pub struct ControlWindow {
-    window: gtk::ApplicationWindow,
-    address: gtk::Entry,
+    pub window: gtk::ApplicationWindow,
+    pub address: gtk::Entry,
     pub connect: gtk::CheckButton, // Access required in comms_manager.
-    brightness: gtk::Label,
-    zone_1_adjustment: gtk::Adjustment,
-    zone_1_mute: gtk::CheckButton,
-    zone_2_adjustment: gtk::Adjustment,
-    zone_2_mute: gtk::CheckButton,
+    pub brightness: gtk::Label,
+    pub zone_1_adjustment: gtk::Adjustment,
+    pub zone_1_mute: gtk::CheckButton,
+    pub zone_2_adjustment: gtk::Adjustment,
+    pub zone_2_mute: gtk::CheckButton,
     pub socket_connection: RefCell<Option<comms_manager::SocketConnection>>, // Access required in functionality and comms_manager,
 }
 
@@ -114,6 +115,7 @@ impl ControlWindow {
                                 glib::MainContext::default().spawn_local(
                                     comms_manager::initialise_socket_and_listen_for_packets_from_amp(
                                         c_w.clone(), address.to_string(), 50000));
+                                functionality::initialise_control_window(&c_w);
                             }
                         }
                         None => {

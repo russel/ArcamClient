@@ -42,7 +42,8 @@ fn start_mock_avr850() {
         Ok(m) => {
             unsafe { MOCK_AVR850 = Some(m); }
             // The server needs a moment to settle before things will work.
-            thread::sleep(time::Duration::from_millis(100));
+            thread::sleep(time::Duration::from_millis(500));
+            eprintln!("==== start_mockavr850: started the process using port {}", unsafe { PORT_NUMBER });
         },
         Err(e) => panic!("====  start_mockavr850: failed to start MOCK_AVR850 – {}", e),
     }

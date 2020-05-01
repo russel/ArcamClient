@@ -19,4 +19,8 @@
 
 // Have this module so as to export the modules needed for the integration tests.
 
+pub mod about;
 pub mod arcam_protocol;
+pub mod comms_manager;
+pub mod control_window;
+pub mod functionality;

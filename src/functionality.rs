@@ -17,20 +17,34 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+// This module is a Mediator/Façade (roughly, not as per Gang of Four book in which
+// patterns are about classes) between the UI code (control_window module) and the
+// communications code (comms_manager module). This allows for altered function
+// definitions to support integration testing.
+
 use std::rc::Rc;
+#[cfg(test)]
+use std::sync::Mutex;
 
 use glib;
 //use glib::prelude::*;
 use gtk;
 use gtk::prelude::*;
 
+#[cfg(test)]
+use lazy_static::lazy_static;
+
 use crate::arcam_protocol::{AnswerCode, Command, ZoneNumber, create_request};
 use crate::comms_manager::send_to_amp;
 use crate::control_window::ControlWindow;
-use glib::MainContext;
 
+// For UI integration testing replace the function that sends a packet to the amplifier
+// with a function that sends the packet to a queue that can be checked by the testing
+// code.
+
+#[cfg(not(test))]
 fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[u8]) {
-    if (*control_window.socket_connection.borrow_mut()).is_some() {
+    if control_window.socket_connection.borrow().is_some() {
         eprintln!("Send message to amp {:?}", request);
         glib::MainContext::default().spawn_local(send_to_amp(control_window.clone(), request.to_vec()));
     } else {
@@ -43,6 +57,37 @@ fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[
         );
         dialogue.run();
         dialogue.destroy();
+    }
+}
+
+// When compiling the ui_test crate we need these definitions. However when compiling
+// the communications_test crate we need a different definition, more like the above
+// application definition. Is there any way of doing conditional compilation based on
+// the module/crate name?
+
+/*
+#[cfg(test)]
+lazy_static! {
+pub static ref TO_COMMS_MANAGER: Mutex<Vec<Vec<u8>>> = Mutex::new(vec![]);
+}
+
+#[cfg(test)]
+fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[u8]) {
+    if control_window.socket_connection.borrow().is_some() {
+        TO_COMMS_MANAGER.lock().unwrap().push(request.to_vec());
+    }
+}
+*/
+
+// When compiling the communications_test integration test module we need this
+// definition, so that we send the message but do not do any UI activity on failure.
+
+#[cfg(test)]
+fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[u8]) {
+    if control_window.socket_connection.borrow().is_some() {
+        glib::MainContext::default().spawn_local(send_to_amp(control_window.clone(), request.to_vec()));
+    } else {
+        eprintln!("There is no socket connection to send on, sending: {:?}", request);
     }
 }
 
@@ -94,6 +139,11 @@ pub fn initialise_control_window(control_window: &Rc<ControlWindow>) {
     get_zone_2_mute_from_amp(control_window);
 }
 
+// For communications integration testing replace the processing function that normally
+// dispatches UI events with a function that puts the messages on a queue so that they
+// can be checked by the testing code.
+
+#[cfg(not(test))]
 pub fn process_response(control_window: &Rc<ControlWindow>, zone: ZoneNumber, cc: Command, ac: AnswerCode, value: &[u8]) {
     // TODO Deal with non-StatusUpdate packets.
     assert_eq!(ac, AnswerCode::StatusUpdate);
@@ -116,4 +166,14 @@ pub fn process_response(control_window: &Rc<ControlWindow>, zone: ZoneNumber, cc
             }},
         _ => {},
     };
+}
+
+#[cfg(test)]
+lazy_static! {
+pub static ref FROM_COMMS_MANAGER: Mutex<Vec<(ZoneNumber, Command, AnswerCode, Vec<u8>)>> = Mutex::new(vec![]);
+}
+
+#[cfg(test)]
+pub fn process_response(control_window: &Rc<ControlWindow>, zone: ZoneNumber, cc: Command, ac: AnswerCode, value: &[u8]) {
+    FROM_COMMS_MANAGER.lock().unwrap().push((zone, cc, ac, value.to_vec()));
 }
