@@ -65,8 +65,8 @@ pub enum Command {
     RequestMenuStatus = 0x14,
     RequestTunerPreset = 0x15,
     Tune = 0x16,
-    RequestDABSiriusStation = 0x18,
-    RadioProgrammeTypeCategory = 0x19,
+    RequestDABStation = 0x18,
+    ProgrammeTypeCategory = 0x19,
     RequestRDSDLSInformation = 0x1A,
     RequestPresetDetails = 0x1B,
     // =================== Network Commands
@@ -113,8 +113,44 @@ pub enum AnswerCode {
     InvalidDataLength = 0x86,
 }
 
+/// The three levels of brightness of the display.
+#[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
+pub enum Brightness {
+    Off = 0,
+    Level1 = 1,
+    Level2 = 2,
+}
+
+/// The various sources.
+///
+/// AVR450 and AVR750 separate FM and DAB whilst other models, including AVR850
+/// have a single source which can flip between FM and DAB.
+#[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
+pub enum Source {
+    CD = 0x01,
+    BD = 0x02,
+    AV = 0x03,
+    SAT = 0x04,
+    PVR = 0x05,
+    VCR = 0x06,
+    AUX = 0x08,
+    DISPLAY = 0x09,
+    TUNER = 0x0B,  // TUNER (FM)
+    TUNERDAB = 0x0C,  // (AVR450/750 only)
+    NET = 0x0E,
+    USB = 0x0F,
+    STB = 0x10,
+    GAME = 0x11,
+}
+
+/// The value used as the start of packet value.
 pub static PACKET_START: u8 = 0x21;
+
+/// The value used as the end of packet value.
 pub static PACKET_END: u8 = 0x0d;
+
+/// The values used to represent the question of which value is currently set.
+pub static REQUEST_VALUE: u8 = 0xf0;
 
 /**
 Construct a byte sequence representing a valid request to the AVR.
@@ -251,26 +287,40 @@ mod tests {
 
     #[test]
     fn create_display_brightness_request() {
-        match create_request(ZoneNumber::One, Command::DisplayBrightness, &mut [0xf0]) {
-            Ok(value) => assert_eq!(value, [PACKET_START, 0x01, 0x01, 0x01, 0xf0, PACKET_END]),
-            Err(_) => assert!(false),
-        }
+        assert_eq!(
+            create_request(ZoneNumber::One, Command::DisplayBrightness, &mut [REQUEST_VALUE]).unwrap(),
+            [PACKET_START, 0x01, 0x01, 0x01, REQUEST_VALUE, PACKET_END]
+        );
     }
 
     #[test]
     fn create_get_volume_request() {
-        match create_request(ZoneNumber::One, Command::SetRequestVolume, &mut [0xf0]) {
-            Ok(value) => assert_eq!(value, [PACKET_START, 0x01, PACKET_END, 0x01, 0xf0, PACKET_END]),
-            Err(_) => assert!(false),
-        }
+        assert_eq!(
+            create_request(ZoneNumber::One, Command::SetRequestVolume, &mut [REQUEST_VALUE]).unwrap(),
+            [PACKET_START, 0x01, PACKET_END, 0x01, REQUEST_VALUE, PACKET_END]
+        );
     }
 
     #[test]
     fn create_set_volume_request() {
-        match create_request(ZoneNumber::One, Command::SetRequestVolume, &mut [20]) {
-            Ok(value) => assert_eq!(value, [PACKET_START, 0x01, PACKET_END, 0x01, 0x14, PACKET_END]),
-            Err(_) => assert!(false),
-        }
+        assert_eq!(
+            create_request(ZoneNumber::One, Command::SetRequestVolume, &mut [20]).unwrap(),
+            [PACKET_START, 0x01, PACKET_END, 0x01, 0x14, PACKET_END]
+        );
+    }
+
+    #[test]
+    fn parse_empty_request_buffer() {
+        if let Err(e) = parse_request(&[]) {
+            assert_eq!(e, "Insufficient bytes to form a packet.");
+        };
+    }
+
+    #[test]
+    fn parse_request_buffer_with_incorrect_start_marker() {
+        if let Err(e) = parse_request(&[21, 0, 0, 0, 0, 0]) {
+            assert_eq!(e, "First byte is not the start of packet marker.");
+        };
     }
 
     #[test]
@@ -307,18 +357,88 @@ mod tests {
 
     #[test]
     fn create_display_brightness_response() {
-        match create_response(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, &[0x01]) {
-            Ok(value) => assert_eq!(value, [PACKET_START, 0x01, 0x01, 0x00, 0x01, 0x01, PACKET_END]),
-            Err(_) => assert!(false),
-        }
+        assert_eq!(
+            create_response(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, &[0x01]).unwrap(),
+            [PACKET_START, 0x01, 0x01, 0x00, 0x01, 0x01, PACKET_END]
+        );
+    }
+
+    #[test]
+    fn parse_empty_response_buffer() {
+        if let Err(e) = parse_response(&[]) {
+            assert_eq!(e, "Insufficient bytes to form a packet.");
+        };
+    }
+
+    #[test]
+    fn parse_response_buffer_with_incorrect_start_marker() {
+        if let Err(e) = parse_request(&[21, 0, 0, 0, 0, 0]) {
+            assert_eq!(e, "First byte is not the start of packet marker.");
+        };
     }
 
     #[test]
     fn parse_valid_display_brightness_response() {
-        match parse_response(
-            &create_response(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, &[0x01]).unwrap()) {
-            Ok(value) => assert_eq!(value, (ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![0x01], 7)),
-            Err(_) => assert!(false),
-        }
+        let response = create_response(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, &[0x01]).unwrap();
+        assert_eq!(
+            parse_response(&response).unwrap(),
+            (ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![0x01], 7)
+        );
     }
+
+    //  Some real response packets from an AVR850.
+
+    #[test]
+    fn create_station_name_response() {
+        assert_eq!(
+            create_response(ZoneNumber::One, Command::RequestDABStation, AnswerCode::StatusUpdate, "Smooth Country  ".as_bytes()).unwrap(),
+            [33, 1, 24, 0, 16, 83, 109, 111, 111, 116, 104, 32, 67, 111, 117, 110, 116, 114, 121, 32, 32, 13]
+        )
+    }
+
+    #[test]
+    fn parse_station_name_response() {
+        assert_eq!(
+            parse_response(&[33, 1, 24, 0, 16, 83, 109, 111, 111, 116, 104, 32, 67, 111, 117, 110, 116, 114, 121, 32, 32, 13]).unwrap(),
+            (ZoneNumber::One, Command::RequestDABStation, AnswerCode::StatusUpdate, "Smooth Country  ".as_bytes().to_vec(), 22)
+        );
+    }
+
+    #[test]
+    fn create_station_category_response() {
+        assert_eq!(
+            create_response(ZoneNumber::One, Command::ProgrammeTypeCategory, AnswerCode::StatusUpdate, "Country Music   ".as_bytes()).unwrap(),
+            [33, 1, 25, 0, 16, 67, 111, 117, 110, 116, 114, 121, 32, 77, 117, 115, 105, 99, 32, 32, 32, 13]
+        );
+    }
+
+    #[test]
+    fn parse_station_category_response() {
+        assert_eq!(
+            parse_response(&[33, 1, 25, 0, 16, 67, 111, 117, 110, 116, 114, 121, 32, 77, 117, 115, 105, 99, 32, 32, 32, 13]).unwrap(),
+            (ZoneNumber::One, Command::ProgrammeTypeCategory, AnswerCode::StatusUpdate, "Country Music   ".as_bytes().to_vec(), 22)
+        );
+    }
+
+    #[test]
+    fn parse_station_rds_dls() {
+        assert_eq!(
+            // String here is actually "Now on Smooth: Living In A Box with Room In Your Heart"
+            parse_response(&[33, 1, 26, 0, 129, 12, 78, 111, 119, 32, 111, 110, 32, 83, 109, 111, 111, 116, 104, 58,
+                32, 76, 105, 118, 105, 110, 103, 32, 73, 110, 32, 65, 32, 66, 111, 120, 32, 119, 105, 116, 104, 32, 82,
+                111, 111, 109, 32, 73, 110, 32, 89, 111, 117, 114, 32, 72, 101, 97, 114, 116, 0, 0, 32, 32, 32, 32, 32,
+                32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+                32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+                32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 13]).unwrap(),
+            (ZoneNumber::One, Command::RequestRDSDLSInformation, AnswerCode::StatusUpdate,
+             vec![12, 78, 111, 119, 32, 111, 110, 32, 83, 109, 111, 111, 116, 104, 58,
+                  32, 76, 105, 118, 105, 110, 103, 32, 73, 110, 32, 65, 32, 66, 111, 120, 32, 119, 105, 116, 104, 32, 82,
+                  111, 111, 109, 32, 73, 110, 32, 89, 111, 117, 114, 32, 72, 101, 97, 114, 116, 0, 0, 32, 32, 32, 32, 32,
+                  32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+                  32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+                  32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,]
+             , 135)
+        );
+    }
+
 }

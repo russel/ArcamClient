@@ -23,6 +23,35 @@ A program to simulate a AVR850 so that integration tests of the Arcam client can
 The process opens port 50000 and listens for TCP packets using the Arcam IR remote control
 protocol. Replies to queries must be sent within three seconds of the request being received. NB
 This is an asynchronous question/answer system not a synchronous one.
+
+When on a DAB radio such as Smooth, AVR850s send out
+Command::RequestRDSDLSInformation response packets on a regular basis without
+any prior request. So packets such as:
+
+  [33, 1, 26, 0, 129, 12, 79, 110, 32, 65, 105, 114, 32, 78, 111, 119, 32, 111, 110, 32, 83, 109, 111, 111, 116, 104, 58, 32, 71, 97, 114, 121, 32, 75, 105, 110, 103, 0, 0, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32]
+
+get sent out . They are always 129 long data packets containing a zero
+terminates string. So in the above case:
+
+ 'O', 'n', ' ', 'A', 'i', 'r', ' ', 'N', 'o', 'w', ' ', 'o', 'n', ' ', 'S', 'm', 'o', 'o', 't', 'h', ':', ' ', 'G', 'a', 'r', 'y', ' ', 'K', 'i', 'n', 'g'
+ "On Air Now on Smooth: Gary King."
+
+also seen is the string:
+
+  "Smooth - Your Relaxing Music Mix"
+
+On a channel change some packets got emitted:
+
+[33, 1, 24, 0, 16, 83, 109, 111, 111, 116, 104, 32, 67, 111, 117, 110, 116, 114, 121, 32, 32, 13]
+[33, 1, 25, 0, 16, 67, 111, 117, 110, 116, 114, 121, 32, 77, 117, 115, 105, 99, 32, 32, 32, 13]
+[33, 1, 26, 0, 129, 25, 78, 111, 119, 32, 111, 110, 32, 83, 109, 111, 111, 116, 104, 32, 67,
+111, 117, 110, 116, 114, 121, 58, 32, 66, 114, 101, 116, 116, 32, 69, 108, 100, 114, 101, 100,
+103, 101, 32, 119, 105, 116, 104, 32, 68, 114, 117, 110, 107, 32, 79, 110, 32, 89, 111, 117,
+114, 32, 76, 111, 118, 101, 0, 0, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+32, 32, 13]
+
 */
 
 use std::cell::Cell;
@@ -33,8 +62,9 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::str::from_utf8;
 
 use arcamclient::arcam_protocol::{
-    AnswerCode, Command, ZoneNumber,
-    PACKET_START, create_response, parse_request,
+    AnswerCode, Brightness, Command, Source, ZoneNumber,
+    PACKET_START, REQUEST_VALUE,
+    create_response, parse_request,
 };
 
 /// Zone state for an AVR. An AVR comprises a number of zones.
@@ -50,6 +80,7 @@ struct ZoneState {
 struct AmpState {
     zones: HashMap<ZoneNumber, ZoneState>,
     brightness: Cell<u8>,
+    source: Cell<Source>,
 }
 
 impl Default for AmpState {
@@ -57,6 +88,7 @@ impl Default for AmpState {
         let mut amp_state = Self {
             zones: HashMap::new(),
             brightness: Cell::new(1), // TODO Values 0, 1, and 2 are the only ones allowed.
+            source: Cell::new(Source::TUNER),
         };
         amp_state.zones.insert(ZoneNumber::One, ZoneState{power: Cell::new(true), volume: Cell::new(30), mute: Cell::new(false)});
         amp_state.zones.insert(ZoneNumber::Two, ZoneState{power: Cell::new(false), volume: Cell::new(30), mute: Cell::new(true)});
@@ -68,13 +100,13 @@ impl Default for AmpState {
 fn create_command_response(zone: ZoneNumber, cc: Command, values: &[u8], amp_state: &mut AmpState) -> Result<Vec<u8>, String>{
     match cc {
         Command::DisplayBrightness =>
-            if values[0] != 0xf0 {
+            if values[0] != REQUEST_VALUE {
                 Err(format!("Incorrect DisplayBrightness request {:?}", values[0]))
             } else {
                 Ok(create_response(zone, cc, AnswerCode::StatusUpdate, &[amp_state.brightness.get()]).unwrap())
             },
         Command::SetRequestVolume =>
-            if values[0] == 0xf0 {
+            if values[0] == REQUEST_VALUE {
                 Ok(create_response(zone, cc, AnswerCode::StatusUpdate, [amp_state.zones[&zone].volume.get()].as_ref()).unwrap())
             } else if values[0] < 100 {
                 amp_state.zones[&zone].volume.set(values[0]);
@@ -82,9 +114,14 @@ fn create_command_response(zone: ZoneNumber, cc: Command, values: &[u8], amp_sta
             } else {
                 Err(format!("Failed to deal with SetRequestVolume command {:?}", cc))
             }
+        //  TODO implement these two.
+        Command::RequestCurrentSource => Err("Not implemented.".to_string()),
+        Command::VideoSelection => Err("Not implemented.".to_string()),
         _ => Err("Failed to deal with command.".to_string()),
     }
 }
+
+
 
 /// Handle a connection from a remote client.
 fn handle_client(stream: &mut TcpStream, amp_state: &mut AmpState) {
@@ -178,14 +215,18 @@ mod tests {
 
     use super::{AmpState, create_command_response};
 
-    use arcamclient::arcam_protocol::{AnswerCode, Command, ZoneNumber, create_response};
+    use arcamclient::arcam_protocol::{
+        AnswerCode, Command, ZoneNumber,
+        REQUEST_VALUE,
+        create_response,
+    };
 
     #[test]
     fn get_display_brightness() {
         let mut amp_state: AmpState = Default::default();
         assert_eq!(amp_state.brightness.get(), 1);
         assert_eq!(
-            create_command_response(ZoneNumber::One, Command::DisplayBrightness, &mut [0xf0], &mut amp_state).unwrap(),
+            create_command_response(ZoneNumber::One, Command::DisplayBrightness, &mut [REQUEST_VALUE], &mut amp_state).unwrap(),
             create_response(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, &[0x01]).unwrap());
         assert_eq!(amp_state.brightness.get(), 1);
     }

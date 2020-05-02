@@ -25,7 +25,8 @@ use std::str::from_utf8;
 
 use arcamclient::arcam_protocol::{
     ZoneNumber, Command, AnswerCode,
-    create_request, parse_response
+    REQUEST_VALUE,
+    create_request, parse_response,
 };
 
 fn connect_mock_avr850_send_and_receive(send_data: &[u8]) -> Result<Vec<u8>, String> {
@@ -67,7 +68,7 @@ fn amx_value() {
 #[test]
 fn get_default_brightness() {
     match connect_mock_avr850_send_and_receive(
-        &create_request(ZoneNumber::One, Command::DisplayBrightness, &mut [0xf0]).unwrap()
+        &create_request(ZoneNumber::One, Command::DisplayBrightness, &mut [REQUEST_VALUE]).unwrap()
     ) {
         Ok(buffer) => assert_eq!(
             parse_response(&buffer).unwrap(),

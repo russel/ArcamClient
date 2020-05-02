@@ -35,6 +35,7 @@ use gtk::prelude::*;
 
 use arcamclient::arcam_protocol::{
     ZoneNumber, Command, AnswerCode,
+    REQUEST_VALUE,
     create_request, parse_response
 };
 use arcamclient::comms_manager;
@@ -117,7 +118,7 @@ fn send_brightness_request() {
     with_dummy_control_window_connected_to_mock_avr850(
         &|c_w| {
             assert!(c_w.socket_connection.borrow().is_some());
-            check_status_and_send_request(&c_w, &create_request(ZoneNumber::One, Command::DisplayBrightness, &[0xf0]).unwrap());
+            check_status_and_send_request(&c_w, &create_request(ZoneNumber::One, Command::DisplayBrightness, &[REQUEST_VALUE]).unwrap());
         });
 }
 */

@@ -124,7 +124,17 @@ pub async fn initialise_socket_and_listen_for_packets_from_amp(control_window: R
     match socket_client.connect(&gio::NetworkAddress::new(address.as_ref(), port_number)).await {
         Ok(s) => *control_window.socket_connection.borrow_mut() = Some(Rc::new(RefCell::new(s))),
         Err(_) => {
+            //  TODO Must remove all this UI stuff from what should be the comms stuff.
             eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp: failed to connect to {}:{}", address, port_number);
+            let dialogue = gtk::MessageDialog::new(
+                Some(&control_window.window),
+                gtk::DialogFlags::MODAL,
+                gtk::MessageType::Info,
+                gtk::ButtonsType::Ok,
+                &format!("Failed to connect to {}:{}", address, port_number),
+            );
+            dialogue.run();
+            dialogue.destroy();
             if control_window.connect.get_active() { control_window.connect.set_active(false); };
             assert!(control_window.socket_connection.borrow().is_none());
             return;

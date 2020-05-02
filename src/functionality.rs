@@ -22,11 +22,11 @@
 // communications code (comms_manager module). This allows for altered function
 // definitions to support integration testing.
 
-use std::ffi::CString;
 use std::rc::Rc;
 #[cfg(test)]
 use std::sync::Mutex;
 
+#[cfg(not(test))]
 use glib;
 //use glib::prelude::*;
 use gtk;
@@ -35,7 +35,7 @@ use gtk::prelude::*;
 #[cfg(test)]
 use lazy_static::lazy_static;
 
-use crate::arcam_protocol::{AnswerCode, Command, ZoneNumber, create_request};
+use crate::arcam_protocol::{AnswerCode, Command, ZoneNumber, REQUEST_VALUE, create_request};
 use crate::comms_manager::send_to_amp;
 use crate::control_window::ControlWindow;
 
@@ -79,11 +79,11 @@ fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[
 }
 
 pub fn get_brightness_from_amp(control_window: &Rc<ControlWindow>) {
-    check_status_and_send_request(control_window, &create_request(ZoneNumber::One, Command::DisplayBrightness, &[0xf0]).unwrap());
+    check_status_and_send_request(control_window, &create_request(ZoneNumber::One, Command::DisplayBrightness, &[REQUEST_VALUE]).unwrap());
 }
 
 pub fn get_zone_1_mute_from_amp(control_window: &Rc<ControlWindow>) {
-    check_status_and_send_request(control_window, &create_request(ZoneNumber::One, Command::RequestMuteStatus, &[0xf0]).unwrap());
+    check_status_and_send_request(control_window, &create_request(ZoneNumber::One, Command::RequestMuteStatus, &[REQUEST_VALUE]).unwrap());
 }
 
 pub fn set_zone_1_mute_on_amp(control_window: &Rc<ControlWindow>, off: bool) {
@@ -91,7 +91,7 @@ pub fn set_zone_1_mute_on_amp(control_window: &Rc<ControlWindow>, off: bool) {
 }
 
 pub fn get_zone_1_volume_from_amp(control_window: &Rc<ControlWindow>) {
-    check_status_and_send_request(control_window, &create_request(ZoneNumber::One, Command::SetRequestVolume, &[0xf0]).unwrap());
+    check_status_and_send_request(control_window, &create_request(ZoneNumber::One, Command::SetRequestVolume, &[REQUEST_VALUE]).unwrap());
 }
 
 pub fn set_zone_1_volume_on_amp(control_window: &Rc<ControlWindow>, value: f64) {
@@ -101,7 +101,7 @@ pub fn set_zone_1_volume_on_amp(control_window: &Rc<ControlWindow>, value: f64) 
 }
 
 pub fn get_zone_2_mute_from_amp(control_window: &Rc<ControlWindow>) {
-    check_status_and_send_request(control_window, &create_request(ZoneNumber::Two, Command::RequestMuteStatus, &[0xf0]).unwrap());
+    check_status_and_send_request(control_window, &create_request(ZoneNumber::Two, Command::RequestMuteStatus, &[REQUEST_VALUE]).unwrap());
 }
 
 pub fn set_zone_2_mute_on_amp(control_window: &Rc<ControlWindow>, off: bool) {
@@ -109,7 +109,7 @@ pub fn set_zone_2_mute_on_amp(control_window: &Rc<ControlWindow>, off: bool) {
 }
 
 pub fn get_zone_2_volume_from_amp(control_window: &Rc<ControlWindow>) {
-    check_status_and_send_request(control_window, &create_request(ZoneNumber::Two, Command::SetRequestVolume, &[0xf0]).unwrap());
+    check_status_and_send_request(control_window, &create_request(ZoneNumber::Two, Command::SetRequestVolume, &[REQUEST_VALUE]).unwrap());
 }
 
 pub fn set_zone_2_volume_on_amp(control_window: &Rc<ControlWindow>, value: f64) {
@@ -151,10 +151,33 @@ pub fn process_response(control_window: &Rc<ControlWindow>, zone: ZoneNumber, cc
                 ZoneNumber::One => control_window.set_zone_1_mute(value[0]),
                 ZoneNumber::Two => control_window.set_zone_2_mute(value[0]),
             }},
+        Command::RequestDABStation => {
+            assert_eq!(value.len(), 16);
+            let message = match String::from_utf8(value.to_vec()) {
+                Ok(s) => s.trim().to_string(),
+                Err(e) => { eprintln!("££££  process_response: failed to process {:?}", value); "".to_string()},
+            };
+            eprintln!("££££  process_response: got the station name: {}", message);
+        }
+        Command::ProgrammeTypeCategory => {
+            assert_eq!(value.len(), 16);
+            let message = match String::from_utf8(value.to_vec()) {
+                Ok(s) => s.trim().to_string(),
+                Err(e) => { eprintln!("££££  process_response: failed to process {:?}", value); "".to_string()},
+            };
+            eprintln!("££££  process_response: got the station type: {}", message);
+        }
         Command::RequestRDSDLSInformation => {
-            assert_eq!(value[0], 12);
-            let s = unsafe { CString::from_vec_unchecked(value[1..129].to_vec()) };
-            eprintln!("££££  process_response: got the packet: {:?}", s);
+            assert_eq!(value.len(), 129);
+            let index_of_nul = match value.iter().position(|x| *x == 0u8) {
+                Some(i) => i,
+                None => { eprintln!("Failed to find a nul character in the array."); 129 },
+            };
+            let message = match String::from_utf8(value[1..index_of_nul].to_vec()) {
+                Ok(s) => s.trim().to_string(),
+                Err(e) => { eprintln!("££££  process_response: failed to get a string – {}", e); "".to_string() },
+            };
+            eprintln!("££££  process_response: got the RDS DLS: {}", message);
         }
         _ => {},
     };
