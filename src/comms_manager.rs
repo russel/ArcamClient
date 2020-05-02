@@ -125,6 +125,8 @@ pub async fn initialise_socket_and_listen_for_packets_from_amp(control_window: R
         Ok(s) => *control_window.socket_connection.borrow_mut() = Some(Rc::new(RefCell::new(s))),
         Err(_) => {
             eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp: failed to connect to {}:{}", address, port_number);
+            if control_window.connect.get_active() { control_window.connect.set_active(false); };
+            assert!(control_window.socket_connection.borrow().is_none());
             return;
         },
     };
@@ -141,7 +143,7 @@ pub async fn initialise_socket_and_listen_for_packets_from_amp(control_window: R
                s
            },
             Err(e) => {
-                eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp:fFailed to read.");
+                eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp: failed to read.");
                 0
             },
         };
@@ -149,12 +151,15 @@ pub async fn initialise_socket_and_listen_for_packets_from_amp(control_window: R
         for i in 0..count {
             queue.push(buffer[i]);
         }
+        eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp: pushed values nto queue: {:?}", &queue);
         match arcam_protocol::parse_response(&queue) {
             Ok((zone, cc, ac, data, count)) => {
+                eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp: got a successful parse of a packet.");
                 for _ in 0..count { queue.pop(); }
                 functionality::process_response(&control_window, zone, cc, ac, &data);
             },
             Err(e) => {
+                eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp: failed to parse a packet.");
                 match e {
                     "Insufficient bytes to form a packet." => {},
                     _ => panic!("XXXXX {}", e),

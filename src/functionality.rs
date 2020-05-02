@@ -22,6 +22,7 @@
 // communications code (comms_manager module). This allows for altered function
 // definitions to support integration testing.
 
+use std::ffi::CString;
 use std::rc::Rc;
 #[cfg(test)]
 use std::sync::Mutex;
@@ -150,6 +151,11 @@ pub fn process_response(control_window: &Rc<ControlWindow>, zone: ZoneNumber, cc
                 ZoneNumber::One => control_window.set_zone_1_mute(value[0]),
                 ZoneNumber::Two => control_window.set_zone_2_mute(value[0]),
             }},
+        Command::RequestRDSDLSInformation => {
+            assert_eq!(value[0], 12);
+            let s = unsafe { CString::from_vec_unchecked(value[1..129].to_vec()) };
+            eprintln!("££££  process_response: got the packet: {:?}", s);
+        }
         _ => {},
     };
 }

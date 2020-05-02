@@ -58,7 +58,7 @@ async fn terminate_application(control_window: Rc<ControlWindow>) {
     control_window.window.get_application().unwrap().quit();
 }
 
-fn with_dummy_control_window_connected_to_mock_AVR850(code: &'static dyn Fn(Rc<ControlWindow>)) {
+fn with_dummy_control_window_connected_to_mock_avr850(code: &'static dyn Fn(Rc<ControlWindow>)) {
     let application = gtk::Application::new(Some("uk.org.winder.arcamclient"), gio::ApplicationFlags::empty()).unwrap();
     application.connect_startup(
         move |app| {
@@ -104,8 +104,20 @@ fn with_dummy_control_window_connected_to_mock_AVR850(code: &'static dyn Fn(Rc<C
 #[test]
 fn connect_to_mock_avr850() {
     eprintln!("~~~~  connect_to_mock_avr850: starting connection to port {}", unsafe { PORT_NUMBER });
-    with_dummy_control_window_connected_to_mock_AVR850(
+    with_dummy_control_window_connected_to_mock_avr850(
         &|c_w| {
             assert!(c_w.socket_connection.borrow().is_some());
         });
 }
+
+/*
+#[test]
+fn send_brightness_request() {
+    eprintln!("~~~~  send_brightness_request: starting connection to port {}", unsafe { PORT_NUMBER });
+    with_dummy_control_window_connected_to_mock_avr850(
+        &|c_w| {
+            assert!(c_w.socket_connection.borrow().is_some());
+            check_status_and_send_request(&c_w, &create_request(ZoneNumber::One, Command::DisplayBrightness, &[0xf0]).unwrap());
+        });
+}
+*/

@@ -115,7 +115,8 @@ impl ControlWindow {
                                 glib::MainContext::default().spawn_local(
                                     comms_manager::initialise_socket_and_listen_for_packets_from_amp(
                                         c_w.clone(), address.to_string(), 50000));
-                                functionality::initialise_control_window(&c_w);
+                                // TODO put this back after experimentation.
+                                //functionality::initialise_control_window(&c_w);
                             }
                         }
                         None => {
