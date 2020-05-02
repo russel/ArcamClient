@@ -41,6 +41,11 @@ use crate::control_window::ControlWindow;
 // For UI integration testing replace the function that sends a packet to the amplifier
 // with a function that sends the packet to a queue that can be checked by the testing
 // code.
+//
+// When compiling the ui_test crate we need these definitions. However when compiling
+// the communications_test crate we need a different definition, more like the above
+// application definition. Fortunately, we only need the updated definition for here
+// for the ui_test, the definition needed for communication_test can be in that file/crate.
 
 #[cfg(not(test))]
 fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[u8]) {
@@ -60,12 +65,6 @@ fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[
     }
 }
 
-// When compiling the ui_test crate we need these definitions. However when compiling
-// the communications_test crate we need a different definition, more like the above
-// application definition. Is there any way of doing conditional compilation based on
-// the module/crate name?
-
-/*
 #[cfg(test)]
 lazy_static! {
 pub static ref TO_COMMS_MANAGER: Mutex<Vec<Vec<u8>>> = Mutex::new(vec![]);
@@ -75,19 +74,6 @@ pub static ref TO_COMMS_MANAGER: Mutex<Vec<Vec<u8>>> = Mutex::new(vec![]);
 fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[u8]) {
     if control_window.socket_connection.borrow().is_some() {
         TO_COMMS_MANAGER.lock().unwrap().push(request.to_vec());
-    }
-}
-*/
-
-// When compiling the communications_test integration test module we need this
-// definition, so that we send the message but do not do any UI activity on failure.
-
-#[cfg(test)]
-fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[u8]) {
-    if control_window.socket_connection.borrow().is_some() {
-        glib::MainContext::default().spawn_local(send_to_amp(control_window.clone(), request.to_vec()));
-    } else {
-        eprintln!("There is no socket connection to send on, sending: {:?}", request);
     }
 }
 

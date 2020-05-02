@@ -43,6 +43,17 @@ use arcamclient::functionality;
 
 use start_avr850::PORT_NUMBER;
 
+// Replacement for functionality::check_status_and_send_request for testing.
+// NB The definition is changed during testing to support UI testing, so we have
+// to provide a definition more like the non-test version – but without any UI activity.
+fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[u8]) {
+    if control_window.socket_connection.borrow().is_some() {
+        glib::MainContext::default().spawn_local(comms_manager::send_to_amp(control_window.clone(), request.to_vec()));
+    } else {
+        eprintln!("There is no socket connection to send on, sending: {:?}", request);
+    }
+}
+
 async fn terminate_application(control_window: Rc<ControlWindow>) {
     control_window.window.get_application().unwrap().quit();
 }
@@ -95,9 +106,6 @@ fn connect_to_mock_avr850() {
     eprintln!("~~~~  connect_to_mock_avr850: starting connection to port {}", unsafe { PORT_NUMBER });
     with_dummy_control_window_connected_to_mock_AVR850(
         &|c_w| {
-            //assert!(c_w.socket_connection.borrow().is_some());
-            assert_eq!(1, 2, "Value is {:?}", c_w.socket_connection.borrow());
-            // TODO Using asserts seems to terminate the thread which means problems
-            //   terminating the application event loop????
+            assert!(c_w.socket_connection.borrow().is_some());
         });
 }

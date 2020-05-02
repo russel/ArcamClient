@@ -17,6 +17,7 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use gio;
@@ -118,12 +119,10 @@ impl AsyncWrite for SocketConnection {
  */
 
 pub async fn initialise_socket_and_listen_for_packets_from_amp(control_window: Rc<ControlWindow>, address: String, port_number: u16) {
-    // TODO Why is this output to stderr not output? Is it because the code is not
-    //   executed or because stderr is problematic?
     eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp: trying to connect to {}:{}", address, port_number);
     let socket_client = SocketClient::new();
     match socket_client.connect(&gio::NetworkAddress::new(address.as_ref(), port_number)).await {
-        Ok(s) => *control_window.socket_connection.borrow_mut() = Some(s),
+        Ok(s) => *control_window.socket_connection.borrow_mut() = Some(Rc::new(RefCell::new(s))),
         Err(_) => {
             eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp: failed to connect to {}:{}", address, port_number);
             return;
@@ -136,7 +135,7 @@ pub async fn initialise_socket_and_listen_for_packets_from_amp(control_window: R
     eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp: entering listen loop for {}:{}", address, port_number);
     loop {
         //  TODO Find a way of having the blocking read without keeping the mutable borrow open.
-        let count = match (*control_window.socket_connection.borrow_mut()).as_mut().unwrap().read(&mut buffer).await {
+        let count = match control_window.socket_connection.borrow().as_ref().unwrap().borrow_mut().read(&mut buffer).await {
            Ok(s) => {
                eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp: got a packet: {:?}", &buffer[..s]);
                s
@@ -171,7 +170,7 @@ pub async fn initialise_socket_and_listen_for_packets_from_amp(control_window: R
 pub async fn terminate_connection(control_window: Rc<ControlWindow>) {
     if (*control_window.socket_connection.borrow_mut()).is_some() {
         eprintln!("$$$$  terminate_connection: closing current connection.");
-        match (*control_window.socket_connection.borrow_mut()).as_mut().unwrap().close().await {
+        match control_window.socket_connection.borrow().as_ref().unwrap().borrow_mut().close().await {
             Ok(s) => {},
             Err(e) => eprintln!("$$$$  terminate_connection: failed to close the connection: {:?}", e),
         };
@@ -182,7 +181,7 @@ pub async fn terminate_connection(control_window: Rc<ControlWindow>) {
 
 pub async fn send_to_amp(control_window: Rc<ControlWindow>, packet: Vec<u8>) {
     eprintln!("$$$$  send_to_amp: send packet to amp {:?}", packet);
-    match (*control_window.socket_connection.borrow_mut()).as_mut().unwrap().write_all(&packet).await {
+    match control_window.socket_connection.borrow().as_ref().unwrap().borrow_mut().write_all(&packet).await {
         Ok(s) => {},
         Err(e) => eprintln!("$$$$  send_to_amp: failed to send ot the amp on the connection: {:?}", e),
     }

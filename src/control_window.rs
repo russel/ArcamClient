@@ -41,7 +41,7 @@ pub struct ControlWindow {
     pub zone_1_mute: gtk::CheckButton,
     pub zone_2_adjustment: gtk::Adjustment,
     pub zone_2_mute: gtk::CheckButton,
-    pub socket_connection: RefCell<Option<comms_manager::SocketConnection>>, // Access required in functionality and comms_manager,
+    pub socket_connection: RefCell<Option<Rc<RefCell<comms_manager::SocketConnection>>>>, // Access required in functionality and comms_manager,
 }
 
 impl ControlWindow {
