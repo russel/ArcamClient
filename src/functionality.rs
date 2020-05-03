@@ -26,8 +26,8 @@ use std::rc::Rc;
 #[cfg(test)]
 use std::sync::Mutex;
 
-#[cfg(not(test))]
-use glib;
+//#[cfg(not(test))]
+//use glib;
 //use glib::prelude::*;
 use gtk;
 use gtk::prelude::*;
@@ -50,8 +50,11 @@ use crate::control_window::ControlWindow;
 #[cfg(not(test))]
 fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[u8]) {
     if control_window.connect.get_active() {
-        eprintln!("Send message to amp {:?}", request);
-        control_window.to_comms_manager.borrow_mut().as_ref().unwrap().send(request.to_vec());
+        eprintln!("$$$$  check_status_and_send_request: send message to amp {:?}", request);
+        match control_window.to_comms_manager.borrow_mut().as_ref().unwrap().send(request.to_vec()) {
+            Ok(_) => {},
+            Err(e) => eprintln!("$$$$  check_status_and_send_request: failed to send packet – {:?}", e),
+        }
     } else {
         let dialogue = gtk::MessageDialog::new(
             None::<&gtk::Window>,
@@ -153,7 +156,7 @@ pub fn process_response(control_window: &Rc<ControlWindow>, datum: (ZoneNumber, 
             assert_eq!(value.len(), 16);
             let message = match String::from_utf8(value.to_vec()) {
                 Ok(s) => s.trim().to_string(),
-                Err(e) => { eprintln!("££££  process_response: failed to process {:?}", value); "".to_string()},
+                Err(e) => { eprintln!("££££  process_response: failed to process {:?} – {:?}", value, e); "".to_string()},
             };
             eprintln!("££££  process_response: got the station name: {}", message);
         }
@@ -161,7 +164,7 @@ pub fn process_response(control_window: &Rc<ControlWindow>, datum: (ZoneNumber, 
             assert_eq!(value.len(), 16);
             let message = match String::from_utf8(value.to_vec()) {
                 Ok(s) => s.trim().to_string(),
-                Err(e) => { eprintln!("££££  process_response: failed to process {:?}", value); "".to_string()},
+                Err(e) => { eprintln!("££££  process_response: failed to process {:?} – {:?}", value, e); "".to_string()},
             };
             eprintln!("££££  process_response: got the station type: {}", message);
         }

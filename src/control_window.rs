@@ -28,7 +28,6 @@ use gtk;
 use gtk::prelude::*;
 
 use crate::about;
-use crate::arcam_protocol::{AnswerCode, Command, ZoneNumber};
 use crate::comms_manager;
 use crate::functionality;
 
@@ -124,7 +123,6 @@ impl ControlWindow {
                                 let address = address;
                                 eprintln!("Connect to {}:50000", &address);
                                 match comms_manager::connect_to_amp(
-                                    &c_w,
                                     &tx_from_comms_manager,
                                     &address.to_string(),
                                     50000,
@@ -133,7 +131,7 @@ impl ControlWindow {
                                         *c_w.to_comms_manager.borrow_mut() = Some(s);
 
                                     },
-                                    Err(e) => eprintln!("Failed to connect to amp"),
+                                    Err(e) => eprintln!("Failed to connect to amp – {:?}", e),
                                 };
 
                                 // TODO put this back after experimentation.
@@ -155,7 +153,7 @@ impl ControlWindow {
                     };
                 } else {
                     eprintln!("Terminate connection to amp.");
-                    comms_manager::disconnect_from_amp(c_w.clone());
+                    comms_manager::disconnect_from_amp();
                 }
             }
         });

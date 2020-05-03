@@ -17,20 +17,17 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::rc::Rc;
-
 use gio;
 use gio::prelude::*;
 use glib;
 //use glib::prelude::*;
 //use gtk;
-use gtk::prelude::*;
+//use gtk::prelude::*;
 
 use futures;
+//use futures::Future;
 
 use crate::arcam_protocol::{AnswerCode, Command, ZoneNumber, parse_response};
-use crate::control_window::ControlWindow;
-use crate::functionality;
 
 /*
  * ================================================================================
@@ -134,7 +131,7 @@ async fn listen_to_reader(
                 s
             },
             Err(e) => {
-                eprintln!("$$$$  listen_to_reader: failed to read.");
+                eprintln!("$$$$  listen_to_reader: failed to read – {:?}", e);
                 0
             },
         };
@@ -148,7 +145,10 @@ async fn listen_to_reader(
             Ok((zone, cc, ac, data, count)) => {
                 eprintln!("$$$$  listen_to_reader: got a successful parse of a packet.");
                 for _ in 0..count { queue.pop(); }
-                from_comms_manager.send((zone, cc, ac, data));
+                match from_comms_manager.send((zone, cc, ac, data)) {
+                    Ok(_) => {},
+                    Err(e) => eprintln!("$$$$  listen_to_reader: failed to send packet – {:?}.", e),
+                }
             },
             Err(e) => {
                 eprintln!("$$$$  listen_to_reader: failed to parse a packet.");
@@ -171,25 +171,41 @@ async fn start_a_connection_and_set_up_event_listeners(
         Ok(s) => { s },
         Err(_) => { eprintln!("$$$$  start_a_connection_and_set_up_event_listeners: failed to connect to {}", address); return },
     };
-    let (mut reader, mut writer) = connection.split();
-    to_comms_manager.attach(None, move |datum| {
-        async {
-            match writer.write_all(&datum).await {
-                Ok(x) => {},
+    let (reader, mut writer) = connection.split();
+    to_comms_manager.attach(None, |datum| {
+        eprintln!("$$$$  start_a_connection_and_set_up_event_listeners: writing {:?}", &datum);
+        /*
+        match writer.write_all(&datum).poll() {
+            futures::task::Poll::Ready(x) => {
+                match x {
+                    Ok(s) => {},
+                    Err(e) => { eprintln!("$$$$  start_a_connection_and_set_up_event_listeners: error sending packet to amp {:?}", e) }
+                }
+            },
+            futures::task::Poll::Pending => { eprintln!("$$$$  start_a_connection_and_set_up_event_listeners: not ready to send packet to amp") },
+        };
+         */
+        /*
+        let d = datum.clone();
+        let w = writer.clone();
+        let code = async move {
+            match w.write_all(&d).await {
+                Ok(_) => {},
                 Err(e) => { eprintln!("$$$$  start_a_connection_and_set_up_event_listeners: error sending packet to amp {:?}", e) },
             };
         };
+        glib::MainContext::default().spawn_local(code);
+         */
         Continue(true)  //  TODO  Can terminate this after last read
     });
     glib::MainContext::default().spawn_local(listen_to_reader(reader, to_control_window));
 }
 
 /// Connect to an Arcam amp at the address given.
-pub fn connect_to_amp(control_window: &Rc<ControlWindow>,
-                      //from_control_window: &glib::Receiver<Vec<u8>>,
+pub fn connect_to_amp(
     to_control_window: &glib::Sender<(ZoneNumber, Command, AnswerCode, Vec<u8>)>,
-                      address: &str,
-                      port_number: u16
+    address: &str,
+    port_number: u16
 ) -> Result<glib::Sender<Vec<u8>>, String> {
     let (tx_to_comms_manager, rx_to_comms_manager) = glib::MainContext::channel(glib::source::PRIORITY_DEFAULT);
     glib::MainContext::default().spawn_local(
@@ -203,7 +219,7 @@ pub fn connect_to_amp(control_window: &Rc<ControlWindow>,
 }
 
 /// Terminate the current connection.
-pub fn disconnect_from_amp(control_window: Rc<ControlWindow>) {
+pub fn disconnect_from_amp() {
     /*
     if (*control_window.socket_connection.borrow_mut()).is_some() {
         eprintln!("$$$$  terminate_connection: closing current connection.");
