@@ -17,7 +17,6 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use gio;
@@ -27,14 +26,17 @@ use glib;
 //use gtk;
 use gtk::prelude::*;
 
-use crate::arcam_protocol;
+use futures;
+
+use crate::arcam_protocol::{AnswerCode, Command, ZoneNumber, parse_response};
 use crate::control_window::ControlWindow;
 use crate::functionality;
 
 /*
  * ================================================================================
-  *
+ *
  *  Proposal from Sebastian Dröge  to provide a more Rust-y API to GIO sockets in gtk-rs.
+ *  See  https://github.com/gtk-rs/gio/issues/293
  */
 
 use std::io;
@@ -77,7 +79,6 @@ impl SocketClient {
     }
 }
 
-#[derive(Debug)]
 pub struct SocketConnection {
     connection: gio::SocketConnection,
     read: gio::InputStreamAsyncRead<gio::PollableInputStream>,
@@ -118,58 +119,39 @@ impl AsyncWrite for SocketConnection {
  * ================================================================================
  */
 
-pub async fn initialise_socket_and_listen_for_packets_from_amp(control_window: Rc<ControlWindow>, address: String, port_number: u16) {
-    eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp: trying to connect to {}:{}", address, port_number);
-    let socket_client = SocketClient::new();
-    match socket_client.connect(&gio::NetworkAddress::new(address.as_ref(), port_number)).await {
-        Ok(s) => *control_window.socket_connection.borrow_mut() = Some(Rc::new(RefCell::new(s))),
-        Err(_) => {
-            //  TODO Must remove all this UI stuff from what should be the comms stuff.
-            eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp: failed to connect to {}:{}", address, port_number);
-            let dialogue = gtk::MessageDialog::new(
-                Some(&control_window.window),
-                gtk::DialogFlags::MODAL,
-                gtk::MessageType::Info,
-                gtk::ButtonsType::Ok,
-                &format!("Failed to connect to {}:{}", address, port_number),
-            );
-            dialogue.run();
-            dialogue.destroy();
-            if control_window.connect.get_active() { control_window.connect.set_active(false); };
-            assert!(control_window.socket_connection.borrow().is_none());
-            return;
-        },
-    };
-    eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp: connected to {}:{}", address, port_number);
-    if !control_window.connect.get_active() { control_window.connect.set_active(true); }
+async fn listen_to_reader(
+    mut reader: futures::io::ReadHalf<SocketConnection>,
+    from_comms_manager: glib::Sender<(ZoneNumber, Command, AnswerCode, Vec<u8>)>
+) {
+    // TODO should the byte sequence parsing happen here of elsewhere?
     let mut queue: Vec<u8> = vec![];
     let mut buffer = [0u8; 256];
-    eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp: entering listen loop for {}:{}", address, port_number);
+    eprintln!("$$$$  listen_to_reader: entering listen loop");
     loop {
-        //  TODO Find a way of having the blocking read without keeping the mutable borrow open.
-        let count = match control_window.socket_connection.borrow().as_ref().unwrap().borrow_mut().read(&mut buffer).await {
-           Ok(s) => {
-               eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp: got a packet: {:?}", &buffer[..s]);
-               s
-           },
+        let count = match reader.read(&mut buffer).await {
+            Ok(s) => {
+                eprintln!("$$$$  listen_to_reader: got a packet: {:?}", &buffer[..s]);
+                s
+            },
             Err(e) => {
-                eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp: failed to read.");
+                eprintln!("$$$$  listen_to_reader: failed to read.");
                 0
             },
         };
+        //  TODO what happens if the amp is switched off (or put to sleep) during a connection?
         if count == 0 { break; }
         for i in 0..count {
             queue.push(buffer[i]);
         }
-        eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp: pushed values nto queue: {:?}", &queue);
-        match arcam_protocol::parse_response(&queue) {
+        eprintln!("$$$$  listen_to_reader: pushed values nto queue: {:?}", &queue);
+        match parse_response(&queue) {
             Ok((zone, cc, ac, data, count)) => {
-                eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp: got a successful parse of a packet.");
+                eprintln!("$$$$  listen_to_reader: got a successful parse of a packet.");
                 for _ in 0..count { queue.pop(); }
-                functionality::process_response(&control_window, zone, cc, ac, &data);
+                from_comms_manager.send((zone, cc, ac, data));
             },
             Err(e) => {
-                eprintln!("$$$$  initialise_socket_and_listen_for_packets_from_amp: failed to parse a packet.");
+                eprintln!("$$$$  listen_to_reader: failed to parse a packet.");
                 match e {
                     "Insufficient bytes to form a packet." => {},
                     _ => panic!("XXXXX {}", e),
@@ -177,12 +159,52 @@ pub async fn initialise_socket_and_listen_for_packets_from_amp(control_window: R
             },
         }
     }
-    *control_window.socket_connection.borrow_mut() = None;
-    if control_window.connect.get_active() { control_window.connect.set_active(false); };
+}
+
+async fn start_a_connection_and_set_up_event_listeners(
+    to_control_window: glib::Sender<(ZoneNumber, Command, AnswerCode, Vec<u8>)>,
+    to_comms_manager: glib::Receiver<Vec<u8>>,
+    address: gio::NetworkAddress,
+) {
+    let client = SocketClient::new();
+    let connection = match client.connect(&address).await {
+        Ok(s) => { s },
+        Err(_) => { eprintln!("$$$$  start_a_connection_and_set_up_event_listeners: failed to connect to {}", address); return },
+    };
+    let (mut reader, mut writer) = connection.split();
+    to_comms_manager.attach(None, move |datum| {
+        async {
+            match writer.write_all(&datum).await {
+                Ok(x) => {},
+                Err(e) => { eprintln!("$$$$  start_a_connection_and_set_up_event_listeners: error sending packet to amp {:?}", e) },
+            };
+        };
+        Continue(true)  //  TODO  Can terminate this after last read
+    });
+    glib::MainContext::default().spawn_local(listen_to_reader(reader, to_control_window));
+}
+
+/// Connect to an Arcam amp at the address given.
+pub fn connect_to_amp(control_window: &Rc<ControlWindow>,
+                      //from_control_window: &glib::Receiver<Vec<u8>>,
+    to_control_window: &glib::Sender<(ZoneNumber, Command, AnswerCode, Vec<u8>)>,
+                      address: &str,
+                      port_number: u16
+) -> Result<glib::Sender<Vec<u8>>, String> {
+    let (tx_to_comms_manager, rx_to_comms_manager) = glib::MainContext::channel(glib::source::PRIORITY_DEFAULT);
+    glib::MainContext::default().spawn_local(
+        start_a_connection_and_set_up_event_listeners(
+            to_control_window.clone(),
+            rx_to_comms_manager,
+            gio::NetworkAddress::new(address, port_number),
+        )
+    );
+    Ok(tx_to_comms_manager)
 }
 
 /// Terminate the current connection.
-pub async fn terminate_connection(control_window: Rc<ControlWindow>) {
+pub fn disconnect_from_amp(control_window: Rc<ControlWindow>) {
+    /*
     if (*control_window.socket_connection.borrow_mut()).is_some() {
         eprintln!("$$$$  terminate_connection: closing current connection.");
         match control_window.socket_connection.borrow().as_ref().unwrap().borrow_mut().close().await {
@@ -192,12 +214,5 @@ pub async fn terminate_connection(control_window: Rc<ControlWindow>) {
     } else {
         eprintln!("$$$$  terminate_connection: attempted to close a not open connection.");
     };
-}
-
-pub async fn send_to_amp(control_window: Rc<ControlWindow>, packet: Vec<u8>) {
-    eprintln!("$$$$  send_to_amp: send packet to amp {:?}", packet);
-    match control_window.socket_connection.borrow().as_ref().unwrap().borrow_mut().write_all(&packet).await {
-        Ok(s) => {},
-        Err(e) => eprintln!("$$$$  send_to_amp: failed to send ot the amp on the connection: {:?}", e),
-    }
+    */
 }

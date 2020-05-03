@@ -36,7 +36,6 @@ use gtk::prelude::*;
 use lazy_static::lazy_static;
 
 use crate::arcam_protocol::{AnswerCode, Command, ZoneNumber, REQUEST_VALUE, create_request};
-use crate::comms_manager::send_to_amp;
 use crate::control_window::ControlWindow;
 
 // For UI integration testing replace the function that sends a packet to the amplifier
@@ -50,9 +49,9 @@ use crate::control_window::ControlWindow;
 
 #[cfg(not(test))]
 fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[u8]) {
-    if control_window.socket_connection.borrow().is_some() {
+    if control_window.connect.get_active() {
         eprintln!("Send message to amp {:?}", request);
-        glib::MainContext::default().spawn_local(send_to_amp(control_window.clone(), request.to_vec()));
+        control_window.to_comms_manager.borrow_mut().as_ref().unwrap().send(request.to_vec());
     } else {
         let dialogue = gtk::MessageDialog::new(
             None::<&gtk::Window>,
@@ -73,9 +72,7 @@ pub static ref TO_COMMS_MANAGER: Mutex<Vec<Vec<u8>>> = Mutex::new(vec![]);
 
 #[cfg(test)]
 fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[u8]) {
-    if control_window.socket_connection.borrow().is_some() {
-        TO_COMMS_MANAGER.lock().unwrap().push(request.to_vec());
-    }
+    // TODO Send something on the right channel.
 }
 
 pub fn get_brightness_from_amp(control_window: &Rc<ControlWindow>) {
@@ -131,7 +128,8 @@ pub fn initialise_control_window(control_window: &Rc<ControlWindow>) {
 // can be checked by the testing code.
 
 #[cfg(not(test))]
-pub fn process_response(control_window: &Rc<ControlWindow>, zone: ZoneNumber, cc: Command, ac: AnswerCode, value: &[u8]) {
+pub fn process_response(control_window: &Rc<ControlWindow>, datum: (ZoneNumber, Command, AnswerCode, Vec<u8>)) {
+    let (zone, cc, ac, value) = datum;
     // TODO Deal with non-StatusUpdate packets.
     assert_eq!(ac, AnswerCode::StatusUpdate);
     match cc {
@@ -189,6 +187,7 @@ pub static ref FROM_COMMS_MANAGER: Mutex<Vec<(ZoneNumber, Command, AnswerCode, V
 }
 
 #[cfg(test)]
-pub fn process_response(control_window: &Rc<ControlWindow>, zone: ZoneNumber, cc: Command, ac: AnswerCode, value: &[u8]) {
+pub fn process_response(control_window: &Rc<ControlWindow>, datum: (ZoneNumber, Command, AnswerCode, Vec<u8>)) {
+    let (zone, cc, ac, value) = datum;
     FROM_COMMS_MANAGER.lock().unwrap().push((zone, cc, ac, value.to_vec()));
 }

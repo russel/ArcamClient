@@ -22,12 +22,13 @@ use std::rc::Rc;
 
 use gio;
 use gio::prelude::*;
-//use glib;
+use glib;
 //use glib::prelude::*;
 use gtk;
 use gtk::prelude::*;
 
 use crate::about;
+use crate::arcam_protocol::{AnswerCode, Command, ZoneNumber};
 use crate::comms_manager;
 use crate::functionality;
 
@@ -35,13 +36,14 @@ use crate::functionality;
 pub struct ControlWindow {
     pub window: gtk::ApplicationWindow,
     pub address: gtk::Entry,
-    pub connect: gtk::CheckButton, // Access required in comms_manager.
+    pub connect: gtk::CheckButton,
     pub brightness: gtk::Label,
     pub zone_1_adjustment: gtk::Adjustment,
     pub zone_1_mute: gtk::CheckButton,
     pub zone_2_adjustment: gtk::Adjustment,
     pub zone_2_mute: gtk::CheckButton,
-    pub socket_connection: RefCell<Option<Rc<RefCell<comms_manager::SocketConnection>>>>, // Access required in functionality and comms_manager,
+    //pub from_comms_manager: glib::Receiver<(ZoneNumber, Command, AnswerCode, Vec<u8>)>,
+    pub to_comms_manager: RefCell<Option<glib::Sender<Vec<u8>>>>
 }
 
 impl ControlWindow {
@@ -89,7 +91,16 @@ impl ControlWindow {
             zone_1_mute,
             zone_2_adjustment,
             zone_2_mute,
-            socket_connection: RefCell::new(None),
+            //from_comms_manager: rx_from_comms_manager,
+            to_comms_manager: RefCell::new(None),
+        });
+        let (tx_from_comms_manager, rx_from_comms_manager) = glib::MainContext::channel(glib::source::PRIORITY_DEFAULT);
+        rx_from_comms_manager.attach(None, {
+            let c_w = control_window.clone();
+            move |datum| {
+                functionality::process_response(&c_w, datum);
+                Continue(true)
+            }
         });
         control_window.connect.connect_toggled({
             let c_w = control_window.clone();
@@ -112,9 +123,19 @@ impl ControlWindow {
                             } else {
                                 let address = address;
                                 eprintln!("Connect to {}:50000", &address);
-                                glib::MainContext::default().spawn_local(
-                                    comms_manager::initialise_socket_and_listen_for_packets_from_amp(
-                                        c_w.clone(), address.to_string(), 50000));
+                                match comms_manager::connect_to_amp(
+                                    &c_w,
+                                    &tx_from_comms_manager,
+                                    &address.to_string(),
+                                    50000,
+                                ) {
+                                    Ok(s) => {
+                                        *c_w.to_comms_manager.borrow_mut() = Some(s);
+
+                                    },
+                                    Err(e) => eprintln!("Failed to connect to amp"),
+                                };
+
                                 // TODO put this back after experimentation.
                                 //functionality::initialise_control_window(&c_w);
                             }
@@ -134,7 +155,7 @@ impl ControlWindow {
                     };
                 } else {
                     eprintln!("Terminate connection to amp.");
-                    glib::MainContext::default().spawn_local(comms_manager::terminate_connection(c_w.clone()));
+                    comms_manager::disconnect_from_amp(c_w.clone());
                 }
             }
         });
