@@ -38,6 +38,9 @@ use lazy_static::lazy_static;
 use crate::arcam_protocol::{AnswerCode, Command, ZoneNumber, REQUEST_VALUE, create_request};
 use crate::control_window::ControlWindow;
 
+pub type RequestTuple = (ZoneNumber, Command, Vec<u8>);
+pub type ResponseTuple = (ZoneNumber, Command, AnswerCode, Vec<u8>);
+
 // For UI integration testing replace the function that sends a packet to the amplifier
 // with a function that sends the packet to a queue that can be checked by the testing
 // code.
@@ -51,10 +54,19 @@ use crate::control_window::ControlWindow;
 fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[u8]) {
     if control_window.connect.get_active() {
         eprintln!("$$$$  check_status_and_send_request: send message to amp {:?}", request);
-        match control_window.to_comms_manager.borrow_mut().as_ref().unwrap().send(request.to_vec()) {
+        //  TODO How come mutable borrow fails here but succeeds in the connect_toggled method of control_window.connect?
+        //  TODO Why is the argument to replace here not an Option?
+        // Cannot use the content of control_window.to_comms_manager as mutable so get
+        // it out first. Need a dummy Sender because there seems to be implicit
+        // unwrapping of the Option in the replace function. This is clearly wrong,
+        // we should be able to replace with None.
+        let (rx, tx) = futures::channel::mpsc::channel(10);
+        let mut to_comms_manager = control_window.to_comms_manager.borrow_mut().replace(rx).unwrap();
+        match to_comms_manager.try_send(request.to_vec()) {
             Ok(_) => {},
             Err(e) => eprintln!("$$$$  check_status_and_send_request: failed to send packet – {:?}", e),
         }
+        control_window.to_comms_manager.borrow_mut().replace(to_comms_manager);
     } else {
         let dialogue = gtk::MessageDialog::new(
             None::<&gtk::Window>,
@@ -75,7 +87,7 @@ pub static ref TO_COMMS_MANAGER: Mutex<Vec<Vec<u8>>> = Mutex::new(vec![]);
 
 #[cfg(test)]
 fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[u8]) {
-    // TODO Send something on the right channel.
+    // TODO Send something on the right channel so it can be tested in ui_test.
 }
 
 pub fn get_brightness_from_amp(control_window: &Rc<ControlWindow>) {
@@ -126,12 +138,14 @@ pub fn initialise_control_window(control_window: &Rc<ControlWindow>) {
     get_zone_2_mute_from_amp(control_window);
 }
 
+//  TODO Remove this test dependent stuff since the communications tests is not dependent on this code.
+
 // For communications integration testing replace the processing function that normally
 // dispatches UI events with a function that puts the messages on a queue so that they
 // can be checked by the testing code.
 
 #[cfg(not(test))]
-pub fn process_response(control_window: &Rc<ControlWindow>, datum: (ZoneNumber, Command, AnswerCode, Vec<u8>)) {
+pub fn process_response(control_window: &Rc<ControlWindow>, datum: ResponseTuple) {
     let (zone, cc, ac, value) = datum;
     // TODO Deal with non-StatusUpdate packets.
     assert_eq!(ac, AnswerCode::StatusUpdate);
@@ -186,11 +200,12 @@ pub fn process_response(control_window: &Rc<ControlWindow>, datum: (ZoneNumber, 
 
 #[cfg(test)]
 lazy_static! {
-pub static ref FROM_COMMS_MANAGER: Mutex<Vec<(ZoneNumber, Command, AnswerCode, Vec<u8>)>> = Mutex::new(vec![]);
+pub static ref FROM_COMMS_MANAGER: Mutex<Vec<ResponseTuple>> = Mutex::new(vec![]);
 }
 
 #[cfg(test)]
-pub fn process_response(control_window: &Rc<ControlWindow>, datum: (ZoneNumber, Command, AnswerCode, Vec<u8>)) {
+pub fn process_response(control_window: &Rc<ControlWindow>, datum: ResponseTuple) {
     let (zone, cc, ac, value) = datum;
+    //eprintln!("££££  process_response: processing the response {:?}", datum);
     FROM_COMMS_MANAGER.lock().unwrap().push((zone, cc, ac, value.to_vec()));
 }

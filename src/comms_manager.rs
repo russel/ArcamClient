@@ -25,7 +25,7 @@ use glib;
 //use gtk::prelude::*;
 
 use futures;
-//use futures::Future;
+use futures::stream::StreamExt;
 
 use crate::arcam_protocol::{AnswerCode, Command, ZoneNumber, parse_response};
 
@@ -125,6 +125,7 @@ async fn listen_to_reader(
     let mut buffer = [0u8; 256];
     eprintln!("$$$$  listen_to_reader: entering listen loop");
     loop {
+        // TODO How to disconnect this listener when the connection is closed?
         let count = match reader.read(&mut buffer).await {
             Ok(s) => {
                 eprintln!("$$$$  listen_to_reader: got a packet: {:?}", &buffer[..s]);
@@ -137,6 +138,7 @@ async fn listen_to_reader(
         };
         //  TODO what happens if the amp is switched off (or put to sleep) during a connection?
         if count == 0 { break; }
+        //  TODO Should the comms manager be parsing the packets or should this move to functionality?
         for i in 0..count {
             queue.push(buffer[i]);
         }
@@ -163,42 +165,28 @@ async fn listen_to_reader(
 
 async fn start_a_connection_and_set_up_event_listeners(
     to_control_window: glib::Sender<(ZoneNumber, Command, AnswerCode, Vec<u8>)>,
-    to_comms_manager: glib::Receiver<Vec<u8>>,
+    mut to_comms_manager: futures::channel::mpsc::Receiver<Vec<u8>>,
     address: gio::NetworkAddress,
 ) {
+    eprintln!("$$$$  start_a_connection_and_set_up_event_listeners: setting up connection to {:?}", address);
     let client = SocketClient::new();
     let connection = match client.connect(&address).await {
         Ok(s) => { s },
         Err(_) => { eprintln!("$$$$  start_a_connection_and_set_up_event_listeners: failed to connect to {}", address); return },
     };
     let (reader, mut writer) = connection.split();
-    to_comms_manager.attach(None, |datum| {
-        eprintln!("$$$$  start_a_connection_and_set_up_event_listeners: writing {:?}", &datum);
-        /*
-        match writer.write_all(&datum).poll() {
-            futures::task::Poll::Ready(x) => {
-                match x {
-                    Ok(s) => {},
-                    Err(e) => { eprintln!("$$$$  start_a_connection_and_set_up_event_listeners: error sending packet to amp {:?}", e) }
-                }
-            },
-            futures::task::Poll::Pending => { eprintln!("$$$$  start_a_connection_and_set_up_event_listeners: not ready to send packet to amp") },
-        };
-         */
-        /*
-        let d = datum.clone();
-        let w = writer.clone();
-        let code = async move {
-            match w.write_all(&d).await {
-                Ok(_) => {},
+    let context = glib::MainContext::default();
+    context.spawn_local(async move {
+        while let Some(data) = to_comms_manager.next().await {
+            eprintln!("$$$$  start_a_connection_and_set_up_event_listeners: writing {:?}", &data);
+            match writer.write_all(&data).await {
+                Ok(_) => { eprintln!("$$$$  start_a_connection_and_set_up_event_listeners: successfully sent packet to amp {:?}", data) },
                 Err(e) => { eprintln!("$$$$  start_a_connection_and_set_up_event_listeners: error sending packet to amp {:?}", e) },
             };
-        };
-        glib::MainContext::default().spawn_local(code);
-         */
-        Continue(true)  //  TODO  Can terminate this after last read
+        }
     });
-    glib::MainContext::default().spawn_local(listen_to_reader(reader, to_control_window));
+    context.spawn_local(listen_to_reader(reader, to_control_window));
+    eprintln!("$$$$  start_a_connection_and_set_up_event_listeners: set up connection to {:?}", address);
 }
 
 /// Connect to an Arcam amp at the address given.
@@ -206,8 +194,9 @@ pub fn connect_to_amp(
     to_control_window: &glib::Sender<(ZoneNumber, Command, AnswerCode, Vec<u8>)>,
     address: &str,
     port_number: u16
-) -> Result<glib::Sender<Vec<u8>>, String> {
-    let (tx_to_comms_manager, rx_to_comms_manager) = glib::MainContext::channel(glib::source::PRIORITY_DEFAULT);
+) -> Result<futures::channel::mpsc::Sender<Vec<u8>>, String> {
+    eprintln!("$$$$  connect_to_amp: connecting to {:?}:{:?}", address, port_number);
+    let (tx_to_comms_manager, rx_to_comms_manager) = futures::channel::mpsc::channel(10);
     glib::MainContext::default().spawn_local(
         start_a_connection_and_set_up_event_listeners(
             to_control_window.clone(),

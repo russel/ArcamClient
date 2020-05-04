@@ -27,6 +27,8 @@ use glib;
 use gtk;
 use gtk::prelude::*;
 
+//use futures;
+
 use crate::about;
 use crate::comms_manager;
 use crate::functionality;
@@ -41,8 +43,7 @@ pub struct ControlWindow {
     pub zone_1_mute: gtk::CheckButton,
     pub zone_2_adjustment: gtk::Adjustment,
     pub zone_2_mute: gtk::CheckButton,
-    //pub from_comms_manager: glib::Receiver<(ZoneNumber, Command, AnswerCode, Vec<u8>)>,
-    pub to_comms_manager: RefCell<Option<glib::Sender<Vec<u8>>>>
+    pub to_comms_manager: RefCell<Option<futures::channel::mpsc::Sender<Vec<u8>>>>
 }
 
 impl ControlWindow {
@@ -90,9 +91,9 @@ impl ControlWindow {
             zone_1_mute,
             zone_2_adjustment,
             zone_2_mute,
-            //from_comms_manager: rx_from_comms_manager,
             to_comms_manager: RefCell::new(None),
         });
+        //  TODO This channel is pre-processed in comms_manager listen_to_reader
         let (tx_from_comms_manager, rx_from_comms_manager) = glib::MainContext::channel(glib::source::PRIORITY_DEFAULT);
         rx_from_comms_manager.attach(None, {
             let c_w = control_window.clone();
@@ -128,8 +129,9 @@ impl ControlWindow {
                                     50000,
                                 ) {
                                     Ok(s) => {
-                                        *c_w.to_comms_manager.borrow_mut() = Some(s);
-
+                                        //  TODO How come a mutable borrow works here but not in functionality::check_status_and_send_request?
+                                        //  TODO Why is the argument to replace here not an Option?
+                                        c_w.to_comms_manager.borrow_mut().replace(s);
                                     },
                                     Err(e) => eprintln!("Failed to connect to amp – {:?}", e),
                                 };
