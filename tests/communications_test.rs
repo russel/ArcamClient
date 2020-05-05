@@ -17,6 +17,7 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+// Need to start a mock AVR850.
 mod start_avr850;
 
 use std::cell::RefCell;
@@ -109,7 +110,7 @@ fn communications_test() {
 
                 // Terminate the application once all tests are run.
                 eprintln!("communications_test::communications_test: send termination signal.");
-                glib::source::timeout_add_seconds_local(2, {
+                glib::source::timeout_add_seconds_local(1, {
                     let cw = c_w.clone();
                     move ||{
                         cw.get_application().unwrap().quit();

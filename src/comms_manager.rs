@@ -25,7 +25,7 @@ use glib;
 //use gtk::prelude::*;
 
 use futures;
-use futures::stream::StreamExt;
+use futures::StreamExt;
 
 use crate::arcam_protocol::{AnswerCode, Command, ZoneNumber, parse_response};
 
@@ -120,7 +120,7 @@ async fn listen_to_reader(
     mut reader: futures::io::ReadHalf<SocketConnection>,
     from_comms_manager: glib::Sender<(ZoneNumber, Command, AnswerCode, Vec<u8>)>
 ) {
-    // TODO should the byte sequence parsing happen here of elsewhere?
+    // TODO should the byte sequence parsing happen here or elsewhere?
     let mut queue: Vec<u8> = vec![];
     let mut buffer = [0u8; 256];
     eprintln!("comms_manager::listen_to_reader: entering listen loop");
@@ -168,11 +168,11 @@ async fn start_a_connection_and_set_up_event_listeners(
     mut to_comms_manager: futures::channel::mpsc::Receiver<Vec<u8>>,
     address: gio::NetworkAddress,
 ) {
-    eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: setting up connection to {:?}", address);
+    eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: setting up connection to {}:{}", address.get_hostname().unwrap(), address.get_port());
     let client = SocketClient::new();
     let connection = match client.connect(&address).await {
         Ok(s) => { s },
-        Err(_) => { eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: failed to connect to {}", address); return },
+        Err(_) => { eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: failed to connect to {}:{}", address.get_hostname().unwrap(), address.get_port()); return },
     };
     let (reader, mut writer) = connection.split();
     let context = glib::MainContext::default();

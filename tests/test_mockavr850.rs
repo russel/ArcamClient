@@ -17,6 +17,7 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+// Need to start a mock AVR850.
 mod start_avr850;
 
 use std::io::{Write, Read};

@@ -19,8 +19,7 @@
 
 // This module is a Mediator/Façade (roughly, not as per Gang of Four book in which
 // patterns are about classes) between the UI code (control_window module) and the
-// communications code (comms_manager module). This allows for altered function
-// definitions to support integration testing.
+// communications code (comms_manager module).
 
 use std::rc::Rc;
 #[cfg(test)]
@@ -39,15 +38,6 @@ use crate::control_window::ControlWindow;
 pub type RequestTuple = (ZoneNumber, Command, Vec<u8>);
 pub type ResponseTuple = (ZoneNumber, Command, AnswerCode, Vec<u8>);
 
-// For UI integration testing replace the function that sends a packet to the amplifier
-// with a function that sends the packet to a queue that can be checked by the testing
-// code.
-//
-// When compiling the ui_test crate we need these definitions. However when compiling
-// the communications_test crate we need a different definition, more like the non-test
-// application definition. Fortunately, we only need the updated definition for here
-// for the ui_test, the definition needed for communication_test can be in that file/crate.
-
 /// Connect to an Arcam amp at the address given.
 pub fn connect_to_amp(
     to_control_window: &glib::Sender<ResponseTuple>,
@@ -55,7 +45,12 @@ pub fn connect_to_amp(
     port_number: u16
 ) -> Result<futures::channel::mpsc::Sender<Vec<u8>>, String> {
     eprintln!("functionality::connect_to_amp: connecting to {}:{}", address, port_number);
-    comms_manager::connect_to_amp(to_control_window, address, port_number)
+    let x = comms_manager::connect_to_amp(to_control_window, address, port_number);
+    match &x {
+        Ok(y) => eprintln!("functionality::connect_to_amp: got Ok result {:p}", y),
+        Err(e) => eprintln!("functionality::connect_to_amp: got Err result – {:?}", e),
+    }
+    x
 }
 
 /// Terminate the current connection.
@@ -69,16 +64,18 @@ fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[
         //  TODO Why is the argument to replace here not an Option?
         // Cannot use the content of control_window.to_comms_manager as mutable so get
         // it out first. Need a dummy Sender because there seems to be implicit
-        // unwrapping of the Option in the replace function. This is clearly wrong,
-        // we should be able to replace with None.
+        // unwrapping of the Option in the replace function, so None cannot be used.
+        // This is clearly wrong, we should be able to replace with None.
         let (rx, tx) = futures::channel::mpsc::channel(10);
         let mut to_comms_manager = control_window.get_to_comms_manager().borrow_mut().replace(rx).unwrap();
+        eprintln!("functionality::check_status_and_send_request: sending {:?}", &request);
         match to_comms_manager.try_send(request.to_vec()) {
             Ok(_) => {},
             Err(e) => eprintln!("functionality::check_status_and_send_request: failed to send packet – {:?}", e),
         }
         control_window.get_to_comms_manager().borrow_mut().replace(to_comms_manager);
     } else {
+        eprintln!("functionality::check_status_and_send_request: not connected to an amp,");
         let dialogue = gtk::MessageDialog::new(
             Some(&control_window.get_window()),
             gtk::DialogFlags::MODAL,
@@ -169,3 +166,4 @@ pub fn process_response(control_window: &Rc<ControlWindow>, datum: ResponseTuple
         _ => {},
     };
 }
+
