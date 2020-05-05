@@ -27,7 +27,7 @@ use glib;
 use futures;
 use futures::StreamExt;
 
-use crate::arcam_protocol::{AnswerCode, Command, ZoneNumber, parse_response};
+use crate::arcam_protocol::parse_response;
 use crate::functionality::ResponseTuple;
 
 /*

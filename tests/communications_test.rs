@@ -36,7 +36,7 @@ use futures::StreamExt;
 //use futures_util::io::AsyncReadExt;
 
 use arcamclient::arcam_protocol::{
-    ZoneNumber, Command, AnswerCode,
+    AnswerCode,Command, Source, ZoneNumber,
     REQUEST_VALUE,
     create_request, parse_response
 };
@@ -100,11 +100,21 @@ fn communications_test() {
                     None => assert!(false, "Failed to get a value from the response queue."),
                 };
 
-                check_status_and_send_request(&c_w,
-                &create_request(ZoneNumber::One, Command::SetRequestVolume, &[0x14]).unwrap()
+                check_status_and_send_request(
+                    &c_w,
+                    &create_request(ZoneNumber::One, Command::SetRequestVolume, &[0x14]).unwrap()
                 );
                 match rx_queue.next().await {
                     Some(s) => assert_eq!(s, (ZoneNumber::One, Command::SetRequestVolume, AnswerCode::StatusUpdate, vec![0x14])),
+                    None => assert!(false, "Failed to get a value from the response queue."),
+                };
+
+                check_status_and_send_request(
+                    &c_w,
+                    &create_request(ZoneNumber::One, Command::RequestCurrentSource, &[REQUEST_VALUE]).unwrap()
+                );
+                match rx_queue.next().await {
+                    Some(s) => assert_eq!(s, (ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::TUNER as u8])),
                     None => assert!(false, "Failed to get a value from the response queue."),
                 };
 

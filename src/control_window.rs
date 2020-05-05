@@ -31,18 +31,19 @@ use gtk::prelude::*;
 
 use crate::about;
 use crate::functionality;
-use crate::arcam_protocol::ZoneNumber;
+use crate::arcam_protocol::{Source, ZoneNumber};
 
 pub struct ControlWindow {
-    window: gtk::ApplicationWindow, // Used in functionality.
+    window: gtk::ApplicationWindow,
     address: gtk::Entry,
-    connect: gtk::CheckButton, // Used in functionality.
+    connect: gtk::CheckButton,
+    source: gtk::Label,
     brightness: gtk::ComboBoxText,
     zone_1_volume: gtk::SpinButton,
     zone_1_mute: gtk::CheckButton,
     zone_2_volume: gtk::SpinButton,
     zone_2_mute: gtk::CheckButton,
-    to_comms_manager: RefCell<Option<futures::channel::mpsc::Sender<Vec<u8>>>>  // Used in functionaity.
+    to_comms_manager: RefCell<Option<futures::channel::mpsc::Sender<Vec<u8>>>>,
 }
 
 impl ControlWindow {
@@ -64,6 +65,7 @@ impl ControlWindow {
         menu_button.set_image(Some(&gtk::Image::new_from_icon_name(Some("open-menu-symbolic"), gtk::IconSize::Button.into())));
         let address: gtk::Entry = builder.get_object("address").unwrap();
         let connect: gtk::CheckButton = builder.get_object("connect").unwrap();
+        let source: gtk::Label = builder.get_object("source").unwrap();
         let brightness: gtk::ComboBoxText = builder.get_object("brightness").unwrap();
         let zone_1_volume: gtk::SpinButton = builder.get_object("zone_1_volume").unwrap();
         let zone_1_mute: gtk::CheckButton = builder.get_object("zone_1_mute").unwrap();
@@ -85,6 +87,7 @@ impl ControlWindow {
             window,
             address,
             connect,
+            source,
             brightness,
             zone_1_volume,
             zone_1_mute,
@@ -186,6 +189,10 @@ impl ControlWindow {
         control_window
     }
 
+    pub fn set_source(self: &Self, source: Source) {
+        self.source.set_text(&format!("{:?}", source));
+    }
+
     pub fn set_brightness(self: &Self, level: u8) {
         assert!(level < 3);
         let brightness_id= if level == 0 { "Off".to_string() } else { "Level_".to_string() + &level.to_string() };
@@ -228,6 +235,7 @@ impl ControlWindow {
             window: gtk::ApplicationWindow::new(application),
             address: gtk::Entry::new(),
             connect: gtk::CheckButton::new(),
+            source: gtk::Label::new(Some("Unknown")),
             brightness: gtk::ComboBoxText::new(),
             zone_1_volume: gtk::SpinButton::new(Some(&zone_1_adjustment), 1.0, 3),
             zone_1_mute: gtk::CheckButton::new(),

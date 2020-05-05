@@ -114,7 +114,12 @@ fn create_command_response(zone: ZoneNumber, cc: Command, values: &[u8], amp_sta
                 Err(format!("Failed to deal with SetRequestVolume command {:?}", cc))
             }
         //  TODO implement these two.
-        Command::RequestCurrentSource => Err("Not implemented.".to_string()),
+        Command::RequestCurrentSource =>
+            if values[0] != REQUEST_VALUE {
+                Err("Not implemented.".to_string())
+            } else {
+                Ok(create_response(zone, cc, AnswerCode::StatusUpdate, &[amp_state.source.get() as u8]).unwrap())
+            },
         Command::VideoSelection => Err("Not implemented.".to_string()),
         _ => Err("Failed to deal with command.".to_string()),
     }

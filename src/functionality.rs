@@ -83,6 +83,11 @@ fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[
     }
 }
 
+pub fn get_source_from_amp(control_window: &Rc<ControlWindow>) {
+    check_status_and_send_request(control_window, &create_request(ZoneNumber::One, Command::RequestCurrentSource, &[REQUEST_VALUE]).unwrap());
+}
+
+
 pub fn get_brightness_from_amp(control_window: &Rc<ControlWindow>) {
     check_status_and_send_request(control_window, &create_request(ZoneNumber::One, Command::DisplayBrightness, &[REQUEST_VALUE]).unwrap());
 }
@@ -106,6 +111,7 @@ pub fn set_volume_on_amp(control_window: &Rc<ControlWindow>, zone:ZoneNumber, va
 }
 
 pub fn initialise_control_window(control_window: &Rc<ControlWindow>) {
+    get_source_from_amp(control_window);
     get_brightness_from_amp(control_window);
     get_volume_from_amp(control_window, ZoneNumber::One);
     get_mute_from_amp(control_window, ZoneNumber::One);
