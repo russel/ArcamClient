@@ -31,22 +31,22 @@ use gtk::prelude::*;
 
 use crate::about;
 use crate::functionality;
+use crate::arcam_protocol::ZoneNumber;
 
-// Integration tests require all fields to be public.
 pub struct ControlWindow {
-    pub window: gtk::ApplicationWindow,
-    pub address: gtk::Entry,
-    pub connect: gtk::CheckButton,
-    pub brightness: gtk::Label,
-    pub zone_1_adjustment: gtk::Adjustment,
-    pub zone_1_mute: gtk::CheckButton,
-    pub zone_2_adjustment: gtk::Adjustment,
-    pub zone_2_mute: gtk::CheckButton,
-    pub to_comms_manager: RefCell<Option<futures::channel::mpsc::Sender<Vec<u8>>>>
+    window: gtk::ApplicationWindow, // Used in functionality.
+    address: gtk::Entry,
+    connect: gtk::CheckButton, // Used in functionality.
+    brightness: gtk::Label,
+    zone_1_volume: gtk::SpinButton,
+    zone_1_mute: gtk::CheckButton,
+    zone_2_volume: gtk::SpinButton,
+    zone_2_mute: gtk::CheckButton,
+    to_comms_manager: RefCell<Option<futures::channel::mpsc::Sender<Vec<u8>>>>  // Used in functionaity.
 }
 
 impl ControlWindow {
-    pub fn new(application: &gtk::Application) -> Rc<ControlWindow> {
+    pub fn new(application: &gtk::Application) -> Rc<Self> {
         let builder = gtk::Builder::new_from_string(include_str!("resources/arcamclient.glade"));
         let window: gtk::ApplicationWindow = builder.get_object("applicationWindow").unwrap();
         window.set_application(Some(application));
@@ -65,9 +65,9 @@ impl ControlWindow {
         let address: gtk::Entry = builder.get_object("address").unwrap();
         let connect: gtk::CheckButton = builder.get_object("connect").unwrap();
         let brightness: gtk::Label = builder.get_object("brightness").unwrap();
-        let zone_1_adjustment: gtk::Adjustment = builder.get_object("zone_1_adjustment").unwrap();
+        let zone_1_volume: gtk::SpinButton = builder.get_object("zone_1_volume").unwrap();
         let zone_1_mute: gtk::CheckButton = builder.get_object("zone_1_mute").unwrap();
-        let zone_2_adjustment: gtk::Adjustment = builder.get_object("zone_2_adjustment").unwrap();
+        let zone_2_volume: gtk::SpinButton = builder.get_object("zone_2_volume").unwrap();
         let zone_2_mute: gtk::CheckButton = builder.get_object("zone_2_mute").unwrap();
         let menu_builder = gtk::Builder::new_from_string(include_str!("resources/application_menu.xml"));
         let application_menu: gio::Menu = menu_builder.get_object("application_menu").unwrap();
@@ -86,13 +86,15 @@ impl ControlWindow {
             address,
             connect,
             brightness,
-            zone_1_adjustment,
+            zone_1_volume,
             zone_1_mute,
-            zone_2_adjustment,
+            zone_2_volume,
             zone_2_mute,
             to_comms_manager: RefCell::new(None),
         });
-        //  TODO This channel is pre-processed in comms_manager listen_to_reader
+        //  TODO This channel is pre-processed in comms_manager::listen_to_reader,
+        //    Should this really be just getting a stream of bytes from comms_manager
+        //    to be processed in functionality to create the information from the data.
         let (tx_from_comms_manager, rx_from_comms_manager) = glib::MainContext::channel(glib::source::PRIORITY_DEFAULT);
         rx_from_comms_manager.attach(None, {
             let c_w = control_window.clone();
@@ -131,6 +133,7 @@ impl ControlWindow {
                                         //  TODO How come a mutable borrow works here?
                                         //  TODO Why is the argument to replace here not an Option?
                                         c_w.to_comms_manager.borrow_mut().replace(s);
+                                        eprintln!("control_window::connect_toggled: connected to amp at {}:50000", address);
                                     },
                                     Err(e) => eprintln!("control_window::connect_toggled: failed to connect to amp – {:?}", e),
                                 };
@@ -157,16 +160,28 @@ impl ControlWindow {
                 }
             }
         });
+        control_window.zone_1_volume.connect_changed({
+            let c_w = control_window.clone();
+            move |button| {
+                functionality::set_volume_on_amp(&c_w, ZoneNumber::One, button.get_value());
+            }
+        });
         control_window.zone_1_mute.connect_toggled({
             let c_w = control_window.clone();
             move |button| {
-                functionality::set_zone_1_mute_on_amp(&c_w, button.get_active())
+                functionality::set_mute_on_amp(&c_w, ZoneNumber::One, button.get_active())
+            }
+        });
+        control_window.zone_2_volume.connect_changed({
+            let c_w = control_window.clone();
+            move |button| {
+                functionality::set_volume_on_amp(&c_w, ZoneNumber::Two, button.get_value());
             }
         });
         control_window.zone_2_mute.connect_toggled({
             let c_w = control_window.clone();
             move |button| {
-                functionality::set_zone_2_mute_on_amp(&c_w, button.get_active())
+                functionality::set_mute_on_amp(&c_w, ZoneNumber::Two, button.get_active())
             }
         });
         control_window
@@ -178,26 +193,48 @@ impl ControlWindow {
         self.brightness.set_text(&brightness_label);
     }
 
-    pub fn set_zone_1_mute(self: &Self, on_off: u8) {
-        assert!(on_off < 2);
-        if on_off == 0 { self.zone_1_mute.set_mode(false); }
-        else { self.zone_1_mute.set_mode(true); }
+    pub fn set_mute(self: &Self, zone: ZoneNumber, on_off: bool) {
+        match zone {
+            ZoneNumber::One => self.zone_1_mute.set_mode(on_off),
+            ZoneNumber::Two => self.zone_2_mute.set_mode(on_off),
+        }
     }
 
-    pub fn set_zone_1_volume(self: &Self, volume: u8) {
-        assert!(volume < 100);
-        self.zone_1_adjustment.set_value(volume as f64);
+    pub fn set_volume(self: &Self, zone: ZoneNumber, volume: f64) {
+        assert!(volume < 100.0);
+        match zone {
+            ZoneNumber::One => self.zone_1_volume.set_value(volume),
+            ZoneNumber::Two => self.zone_2_volume.set_value(volume),
+        }
     }
 
-    pub fn set_zone_2_mute(self: &Self, on_off: u8) {
-        assert!(on_off < 2);
-        if on_off == 0 { self.zone_2_mute.set_mode(false); }
-        else { self.zone_2_mute.set_mode(true); }
+    pub fn get_application(self: &Self) -> Option<gtk::Application> { self.window.get_application() }
+
+    pub fn get_window(self: &Self) -> gtk::ApplicationWindow { self.window.clone() }
+
+    pub fn get_connect(self: &Self) -> gtk::CheckButton { self.connect.clone() }
+
+    pub fn get_to_comms_manager(self: &Self) -> &RefCell<Option<futures::channel::mpsc::Sender<Vec<u8>>>> { &self.to_comms_manager }
+
+    //  Some methods needed for the integration tests.
+
+    pub fn set_address(self: &Self, address: &str) {
+        self.address.set_text(address);
     }
 
-    pub fn set_zone_2_volume(self: &Self, volume: u8) {
-        assert!(volume < 100);
-        self.zone_2_adjustment.set_value(volume as f64);
+    pub fn create_dummy_control_window_for_testing(application: &gtk::Application) -> Self {
+        let zone_1_adjustment = gtk::Adjustment::new(0.0, 0.0, 100.0, 1.0, 10.0, 10.0);
+        let zone_2_adjustment = gtk::Adjustment::new(0.0, 0.0, 100.0, 1.0, 10.0, 10.0);
+        ControlWindow {
+            window: gtk::ApplicationWindow::new(application),
+            address: gtk::Entry::new(),
+            connect: gtk::CheckButton::new(),
+            brightness: gtk::Label::new(Some("Off")),
+            zone_1_volume: gtk::SpinButton::new(Some(&zone_1_adjustment), 1.0, 3),
+            zone_1_mute: gtk::CheckButton::new(),
+            zone_2_volume: gtk::SpinButton::new(Some(&zone_2_adjustment), 1.0, 3),
+            zone_2_mute: gtk::CheckButton::new(),
+            to_comms_manager: RefCell::new(None)
+        }
     }
-
 }

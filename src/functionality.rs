@@ -32,28 +32,12 @@ use std::sync::Mutex;
 use gtk;
 use gtk::prelude::*;
 
-#[cfg(test)]
-use lazy_static::lazy_static;
-
 use crate::arcam_protocol::{AnswerCode, Command, ZoneNumber, REQUEST_VALUE, create_request};
 use crate::comms_manager;
 use crate::control_window::ControlWindow;
 
 pub type RequestTuple = (ZoneNumber, Command, Vec<u8>);
 pub type ResponseTuple = (ZoneNumber, Command, AnswerCode, Vec<u8>);
-
-/// Connect to an Arcam amp at the address given.
-pub fn connect_to_amp(
-    to_control_window: &glib::Sender<ResponseTuple>,
-    address: &str,
-    port_number: u16
-) -> Result<futures::channel::mpsc::Sender<Vec<u8>>, String> {
-    comms_manager::connect_to_amp(to_control_window, address, port_number)
-}
-
-/// Terminate the current connection.
-pub fn disconnect_from_amp() {
-}
 
 // For UI integration testing replace the function that sends a packet to the amplifier
 // with a function that sends the packet to a queue that can be checked by the testing
@@ -64,9 +48,23 @@ pub fn disconnect_from_amp() {
 // application definition. Fortunately, we only need the updated definition for here
 // for the ui_test, the definition needed for communication_test can be in that file/crate.
 
+/// Connect to an Arcam amp at the address given.
+pub fn connect_to_amp(
+    to_control_window: &glib::Sender<ResponseTuple>,
+    address: &str,
+    port_number: u16
+) -> Result<futures::channel::mpsc::Sender<Vec<u8>>, String> {
+    eprintln!("functionality::connect_to_amp: connecting to {}:{}", address, port_number);
+    comms_manager::connect_to_amp(to_control_window, address, port_number)
+}
+
+/// Terminate the current connection.
+pub fn disconnect_from_amp() {
+}
+
 fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[u8]) {
-    if control_window.connect.get_active() {
-        eprintln!("functionality::check_status_and_send_request: send message to amp {:?}", request);
+    eprintln!("functionality::check_status_and_send_request: send message to amp {:?}", request);
+    if control_window.get_connect().get_active() {
         //  TODO How come mutable borrow works here?
         //  TODO Why is the argument to replace here not an Option?
         // Cannot use the content of control_window.to_comms_manager as mutable so get
@@ -74,15 +72,15 @@ fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[
         // unwrapping of the Option in the replace function. This is clearly wrong,
         // we should be able to replace with None.
         let (rx, tx) = futures::channel::mpsc::channel(10);
-        let mut to_comms_manager = control_window.to_comms_manager.borrow_mut().replace(rx).unwrap();
+        let mut to_comms_manager = control_window.get_to_comms_manager().borrow_mut().replace(rx).unwrap();
         match to_comms_manager.try_send(request.to_vec()) {
             Ok(_) => {},
             Err(e) => eprintln!("functionality::check_status_and_send_request: failed to send packet – {:?}", e),
         }
-        control_window.to_comms_manager.borrow_mut().replace(to_comms_manager);
+        control_window.get_to_comms_manager().borrow_mut().replace(to_comms_manager);
     } else {
         let dialogue = gtk::MessageDialog::new(
-            None::<&gtk::Window>,
+            Some(&control_window.get_window()),
             gtk::DialogFlags::MODAL,
             gtk::MessageType::Info,
             gtk::ButtonsType::Ok,
@@ -97,48 +95,30 @@ pub fn get_brightness_from_amp(control_window: &Rc<ControlWindow>) {
     check_status_and_send_request(control_window, &create_request(ZoneNumber::One, Command::DisplayBrightness, &[REQUEST_VALUE]).unwrap());
 }
 
-pub fn get_zone_1_mute_from_amp(control_window: &Rc<ControlWindow>) {
-    check_status_and_send_request(control_window, &create_request(ZoneNumber::One, Command::RequestMuteStatus, &[REQUEST_VALUE]).unwrap());
+pub fn get_mute_from_amp(control_window: &Rc<ControlWindow>, zone: ZoneNumber) {
+    check_status_and_send_request(control_window, &create_request(zone, Command::RequestMuteStatus, &[REQUEST_VALUE]).unwrap());
 }
 
-pub fn set_zone_1_mute_on_amp(control_window: &Rc<ControlWindow>, off: bool) {
+pub fn set_mute_on_amp(control_window: &Rc<ControlWindow>, zone: ZoneNumber, off: bool) {
     eprintln!("set zone 1 mute state to {}", off);
 }
 
-pub fn get_zone_1_volume_from_amp(control_window: &Rc<ControlWindow>) {
-    check_status_and_send_request(control_window, &create_request(ZoneNumber::One, Command::SetRequestVolume, &[REQUEST_VALUE]).unwrap());
+pub fn get_volume_from_amp(control_window: &Rc<ControlWindow>, zone: ZoneNumber) {
+    check_status_and_send_request(control_window, &create_request(zone, Command::SetRequestVolume, &[REQUEST_VALUE]).unwrap());
 }
 
-pub fn set_zone_1_volume_on_amp(control_window: &Rc<ControlWindow>, value: f64) {
+pub fn set_volume_on_amp(control_window: &Rc<ControlWindow>, zone:ZoneNumber, value: f64) {
     let volume = value as u8;
     assert!(volume < 100);
-    check_status_and_send_request(control_window, &create_request(ZoneNumber::One, Command::SetRequestVolume, &[volume]).unwrap());
-}
-
-pub fn get_zone_2_mute_from_amp(control_window: &Rc<ControlWindow>) {
-    check_status_and_send_request(control_window, &create_request(ZoneNumber::Two, Command::RequestMuteStatus, &[REQUEST_VALUE]).unwrap());
-}
-
-pub fn set_zone_2_mute_on_amp(control_window: &Rc<ControlWindow>, off: bool) {
-    eprintln!("set zone 2 mute state to {}", off);
-}
-
-pub fn get_zone_2_volume_from_amp(control_window: &Rc<ControlWindow>) {
-    check_status_and_send_request(control_window, &create_request(ZoneNumber::Two, Command::SetRequestVolume, &[REQUEST_VALUE]).unwrap());
-}
-
-pub fn set_zone_2_volume_on_amp(control_window: &Rc<ControlWindow>, value: f64) {
-    let volume = value as u8;
-    assert!(volume < 100);
-    check_status_and_send_request(control_window, &create_request(ZoneNumber::Two, Command::SetRequestVolume, &[volume]).unwrap());
+    check_status_and_send_request(control_window, &create_request(zone, Command::SetRequestVolume, &[volume]).unwrap());
 }
 
 pub fn initialise_control_window(control_window: &Rc<ControlWindow>) {
     get_brightness_from_amp(control_window);
-    get_zone_1_volume_from_amp(control_window);
-    get_zone_1_mute_from_amp(control_window);
-    get_zone_2_volume_from_amp(control_window);
-    get_zone_2_mute_from_amp(control_window);
+    get_volume_from_amp(control_window, ZoneNumber::One);
+    get_mute_from_amp(control_window, ZoneNumber::One);
+    get_volume_from_amp(control_window, ZoneNumber::Two);
+    get_mute_from_amp(control_window, ZoneNumber::Two);
 }
 
 pub fn process_response(control_window: &Rc<ControlWindow>, datum: ResponseTuple) {
@@ -152,16 +132,12 @@ pub fn process_response(control_window: &Rc<ControlWindow>, datum: ResponseTuple
         },
         Command::SetRequestVolume => {
             assert_eq!(value.len(), 1);
-            match zone {
-                ZoneNumber::One => control_window.set_zone_1_volume(value[0]),
-                ZoneNumber::Two => control_window.set_zone_2_volume(value[0]),
-            }},
+            control_window.set_volume(zone, value[0] as f64);
+        },
         Command::RequestMuteStatus => {
             assert_eq!(value.len(), 1);
-            match zone {
-                ZoneNumber::One => control_window.set_zone_1_mute(value[0]),
-                ZoneNumber::Two => control_window.set_zone_2_mute(value[0]),
-            }},
+            control_window.set_mute(zone, value[0] != 0);
+        },
         Command::RequestDABStation => {
             assert_eq!(value.len(), 16);
             let message = match String::from_utf8(value.to_vec()) {

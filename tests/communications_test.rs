@@ -51,16 +51,12 @@ use start_avr850::PORT_NUMBER;
 // UI activity.
 fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[u8]) {
     let (rx, tx) = futures::channel::mpsc::channel(10);
-    let mut to_comms_manager = control_window.to_comms_manager.borrow_mut().replace(rx).unwrap();
+    let mut to_comms_manager = control_window.get_to_comms_manager().borrow_mut().replace(rx).unwrap();
     match to_comms_manager.try_send(request.to_vec()) {
         Ok(_) => eprintln!("communications_test::check_status_and_send_request: sent packet – {:?}", request),
         Err(e) => eprintln!("communications_test::check_status_and_send_request: failed to send packet – {:?}", e),
     }
-    control_window.to_comms_manager.borrow_mut().replace(to_comms_manager);
-}
-
-async fn terminate_application(control_window: Rc<ControlWindow>) {
-    control_window.window.get_application().unwrap().quit();
+    control_window.get_to_comms_manager().borrow_mut().replace(to_comms_manager);
 }
 
 #[test]
@@ -68,17 +64,7 @@ fn communications_test() {
     //  Start up an application but using a dummy UI.
     let application = gtk::Application::new(Some("uk.org.winder.arcamclient.communications_test"), gio::ApplicationFlags::empty()).unwrap();
     application.connect_startup(move |app| {
-        let control_window = Rc::new(ControlWindow {
-            window: gtk::ApplicationWindow::new(app),
-            address: Default::default(),
-            connect: Default::default(),
-            brightness: gtk::Label::new(Some("dummy")),
-            zone_1_adjustment: gtk::Adjustment::new(0.0, 0.0, 100.0, 1.0, 10.0, 10.0),
-            zone_1_mute: Default::default(),
-            zone_2_adjustment: gtk::Adjustment::new(0.0, 0.0, 100.0, 1.0, 10.0, 10.0),
-            zone_2_mute: Default::default(),
-            to_comms_manager: RefCell::new(None)
-        });
+        let control_window = Rc::new(ControlWindow::create_dummy_control_window_for_testing(app));
         // Set up the mock AVR850 process.
         eprintln!("communications_test::communications_test: making connection to {}", unsafe { PORT_NUMBER });
         let (mut tx_queue, mut rx_queue) = futures::channel::mpsc::channel::<ResponseTuple>(10);
@@ -94,7 +80,7 @@ fn communications_test() {
         match comms_manager::connect_to_amp( &tx_from_comms_manager, "127.0.0.1", unsafe { PORT_NUMBER }) {
             Ok(s) => {
                 eprintln!("communications_test::communications_test: connected to 127.0.0.1:{:?}.", unsafe{ PORT_NUMBER });
-                *control_window.to_comms_manager.borrow_mut() = Some(s);
+                *control_window.get_to_comms_manager().borrow_mut() = Some(s);
             },
             Err(e) => panic!("~~~~ communications_test: failed to connect to the mock amp."),
         }
@@ -103,7 +89,7 @@ fn communications_test() {
             let c_w = control_window.clone();
             async move {
                 eprintln!("communications_test::communications_test: running the test code.");
-                assert!(c_w.to_comms_manager.borrow().is_some());
+                assert!(c_w.get_to_comms_manager().borrow().is_some());
 
                 check_status_and_send_request(
                     &c_w,
@@ -126,7 +112,7 @@ fn communications_test() {
                 glib::source::timeout_add_seconds_local(2, {
                     let cw = c_w.clone();
                     move ||{
-                        cw.window.get_application().unwrap().quit();
+                        cw.get_application().unwrap().quit();
                         Continue(false)
                     }
                 });

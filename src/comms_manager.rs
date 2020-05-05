@@ -195,6 +195,9 @@ pub fn connect_to_amp(
     address: &str,
     port_number: u16
 ) -> Result<futures::channel::mpsc::Sender<Vec<u8>>, String> {
+    // TODO This appears to always connect when in fact it doesn't.
+    //   Need to find a way of messaging the functionality and control_window as to
+    //   whether a connection was actually made or not.
     eprintln!("comms_manager::connect_to_amp: connecting to {:?}:{:?}", address, port_number);
     let (tx_to_comms_manager, rx_to_comms_manager) = futures::channel::mpsc::channel(10);
     glib::MainContext::default().spawn_local(
@@ -209,5 +212,5 @@ pub fn connect_to_amp(
 
 /// Terminate the current connection.
 pub fn disconnect_from_amp() {
-    
+
 }
