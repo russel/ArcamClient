@@ -37,7 +37,7 @@ pub struct ControlWindow {
     window: gtk::ApplicationWindow, // Used in functionality.
     address: gtk::Entry,
     connect: gtk::CheckButton, // Used in functionality.
-    brightness: gtk::Label,
+    brightness: gtk::ComboBoxText,
     zone_1_volume: gtk::SpinButton,
     zone_1_mute: gtk::CheckButton,
     zone_2_volume: gtk::SpinButton,
@@ -64,7 +64,7 @@ impl ControlWindow {
         menu_button.set_image(Some(&gtk::Image::new_from_icon_name(Some("open-menu-symbolic"), gtk::IconSize::Button.into())));
         let address: gtk::Entry = builder.get_object("address").unwrap();
         let connect: gtk::CheckButton = builder.get_object("connect").unwrap();
-        let brightness: gtk::Label = builder.get_object("brightness").unwrap();
+        let brightness: gtk::ComboBoxText = builder.get_object("brightness").unwrap();
         let zone_1_volume: gtk::SpinButton = builder.get_object("zone_1_volume").unwrap();
         let zone_1_mute: gtk::CheckButton = builder.get_object("zone_1_mute").unwrap();
         let zone_2_volume: gtk::SpinButton = builder.get_object("zone_2_volume").unwrap();
@@ -137,8 +137,7 @@ impl ControlWindow {
                                     },
                                     Err(e) => eprintln!("control_window::connect_toggled: failed to connect to amp – {:?}", e),
                                 };
-                                // TODO put this back after experimentation.
-                                //functionality::initialise_control_window(&c_w);
+                                functionality::initialise_control_window(&c_w);
                             }
                         }
                         None => {
@@ -188,9 +187,9 @@ impl ControlWindow {
     }
 
     pub fn set_brightness(self: &Self, level: u8) {
-        assert!(level < 4);
-        let brightness_label= if level == 0 { "Off".to_string() } else { "Level ".to_string() + &level.to_string() };
-        self.brightness.set_text(&brightness_label);
+        assert!(level < 3);
+        let brightness_id= if level == 0 { "Off".to_string() } else { "Level_".to_string() + &level.to_string() };
+        self.brightness.set_active_id(Some(&brightness_id));
     }
 
     pub fn set_mute(self: &Self, zone: ZoneNumber, on_off: bool) {
@@ -229,7 +228,7 @@ impl ControlWindow {
             window: gtk::ApplicationWindow::new(application),
             address: gtk::Entry::new(),
             connect: gtk::CheckButton::new(),
-            brightness: gtk::Label::new(Some("Off")),
+            brightness: gtk::ComboBoxText::new(),
             zone_1_volume: gtk::SpinButton::new(Some(&zone_1_adjustment), 1.0, 3),
             zone_1_mute: gtk::CheckButton::new(),
             zone_2_volume: gtk::SpinButton::new(Some(&zone_2_adjustment), 1.0, 3),

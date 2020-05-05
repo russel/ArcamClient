@@ -22,12 +22,7 @@
 // communications code (comms_manager module).
 
 use std::rc::Rc;
-#[cfg(test)]
-use std::sync::Mutex;
 
-//#[cfg(not(test))]
-//use glib;
-//use glib::prelude::*;
 use gtk;
 use gtk::prelude::*;
 

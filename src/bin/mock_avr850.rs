@@ -70,7 +70,6 @@ use arcamclient::arcam_protocol::{
 /// Zone state for an AVR. An AVR comprises a number of zones.
 #[derive(Debug)]
 struct ZoneState {
-    power: Cell<bool>,
     volume: Cell<u8>,
     mute: Cell<bool>,
 }
@@ -79,7 +78,7 @@ struct ZoneState {
 #[derive(Debug)]
 struct AmpState {
     zones: HashMap<ZoneNumber, ZoneState>,
-    brightness: Cell<u8>,
+    brightness: Cell<u8>,  // Values 0, 1, and 2 are the only ones allowed.
     source: Cell<Source>,
 }
 
@@ -90,8 +89,8 @@ impl Default for AmpState {
             brightness: Cell::new(1), // TODO Values 0, 1, and 2 are the only ones allowed.
             source: Cell::new(Source::TUNER),
         };
-        amp_state.zones.insert(ZoneNumber::One, ZoneState{power: Cell::new(true), volume: Cell::new(30), mute: Cell::new(false)});
-        amp_state.zones.insert(ZoneNumber::Two, ZoneState{power: Cell::new(false), volume: Cell::new(30), mute: Cell::new(true)});
+        amp_state.zones.insert(ZoneNumber::One, ZoneState{volume: Cell::new(30), mute: Cell::new(false)});
+        amp_state.zones.insert(ZoneNumber::Two, ZoneState{volume: Cell::new(30), mute: Cell::new(true)});
         amp_state
     }
 }
@@ -120,8 +119,6 @@ fn create_command_response(zone: ZoneNumber, cc: Command, values: &[u8], amp_sta
         _ => Err("Failed to deal with command.".to_string()),
     }
 }
-
-
 
 /// Handle a connection from a remote client.
 fn handle_client(stream: &mut TcpStream, amp_state: &mut AmpState) {

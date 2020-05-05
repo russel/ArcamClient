@@ -28,6 +28,7 @@ use futures;
 use futures::StreamExt;
 
 use crate::arcam_protocol::{AnswerCode, Command, ZoneNumber, parse_response};
+use crate::functionality::ResponseTuple;
 
 /*
  * ================================================================================
@@ -118,7 +119,7 @@ impl AsyncWrite for SocketConnection {
 
 async fn listen_to_reader(
     mut reader: futures::io::ReadHalf<SocketConnection>,
-    from_comms_manager: glib::Sender<(ZoneNumber, Command, AnswerCode, Vec<u8>)>
+    from_comms_manager: glib::Sender<ResponseTuple>
 ) {
     // TODO should the byte sequence parsing happen here or elsewhere?
     let mut queue: Vec<u8> = vec![];
@@ -164,7 +165,7 @@ async fn listen_to_reader(
 }
 
 async fn start_a_connection_and_set_up_event_listeners(
-    to_control_window: glib::Sender<(ZoneNumber, Command, AnswerCode, Vec<u8>)>,
+    to_control_window: glib::Sender<ResponseTuple>,
     mut to_comms_manager: futures::channel::mpsc::Receiver<Vec<u8>>,
     address: gio::NetworkAddress,
 ) {
@@ -191,7 +192,7 @@ async fn start_a_connection_and_set_up_event_listeners(
 
 /// Connect to an Arcam amp at the address given.
 pub fn connect_to_amp(
-    to_control_window: &glib::Sender<(ZoneNumber, Command, AnswerCode, Vec<u8>)>,
+    to_control_window: &glib::Sender<ResponseTuple>,
     address: &str,
     port_number: u16
 ) -> Result<futures::channel::mpsc::Sender<Vec<u8>>, String> {

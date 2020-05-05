@@ -425,6 +425,8 @@
                         <property name="valign">center</property>
                         <property name="margin_left">10</property>
                         <property name="margin_right">10</property>
+                        <property name="margin_top">10</property>
+                        <property name="margin_bottom">10</property>
                         <property name="label" translatable="yes">Brightness</property>
                       </object>
                       <packing>
@@ -434,20 +436,22 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkLabel" id="brightness">
+                      <object class="GtkComboBoxText" id="brightness">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="halign">end</property>
-                        <property name="valign">center</property>
                         <property name="margin_left">10</property>
                         <property name="margin_right">10</property>
-                        <property name="label" translatable="yes">Level 1</property>
-                        <property name="justify">right</property>
+                        <property name="margin_top">10</property>
+                        <property name="margin_bottom">10</property>
+                        <items>
+                          <item id="Off" translatable="yes">Off</item>
+                          <item id="Level_1" translatable="yes">Level 1</item>
+                          <item id="Level_2" translatable="yes">Level 2</item>
+                        </items>
                       </object>
                       <packing>
                         <property name="expand">True</property>
                         <property name="fill">True</property>
-                        <property name="pack_type">end</property>
                         <property name="position">1</property>
                       </packing>
                     </child>
