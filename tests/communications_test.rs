@@ -38,7 +38,7 @@ use futures::StreamExt;
 use arcamclient::arcam_protocol::{
     AnswerCode,Command, Source, ZoneNumber,
     REQUEST_VALUE,
-    create_request, parse_response
+    create_request, create_response, parse_response
 };
 use arcamclient::comms_manager;
 use arcamclient::control_window::ControlWindow;
@@ -68,8 +68,8 @@ fn communications_test() {
         let control_window = Rc::new(ControlWindow::create_dummy_control_window_for_testing(app));
         // Set up the mock AVR850 process.
         eprintln!("communications_test::communications_test: making connection to {}", unsafe { PORT_NUMBER });
-        let (mut tx_queue, mut rx_queue) = futures::channel::mpsc::channel::<ResponseTuple>(10);
-        let (tx_from_comms_manager, rx_from_comms_manager) = glib::MainContext::channel::<ResponseTuple>(glib::source::PRIORITY_DEFAULT);
+        let (mut tx_queue, mut rx_queue) = futures::channel::mpsc::channel(10);
+        let (tx_from_comms_manager, rx_from_comms_manager) = glib::MainContext::channel(glib::source::PRIORITY_DEFAULT);
         rx_from_comms_manager.attach(None, move |datum| {
             eprintln!("communications_test::communications_test: got a response {:?}.", datum);
             match tx_queue.try_send(datum) {
@@ -96,7 +96,7 @@ fn communications_test() {
                     &c_w,
                     &create_request(ZoneNumber::One, Command::DisplayBrightness, &[REQUEST_VALUE]).unwrap());
                 match rx_queue.next().await {
-                    Some(s) => assert_eq!(s, (ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![0x01])),
+                    Some(s) => assert_eq!(s, create_response(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, &[0x01]).unwrap()),
                     None => assert!(false, "Failed to get a value from the response queue."),
                 };
 
@@ -105,7 +105,7 @@ fn communications_test() {
                     &create_request(ZoneNumber::One, Command::SetRequestVolume, &[0x14]).unwrap()
                 );
                 match rx_queue.next().await {
-                    Some(s) => assert_eq!(s, (ZoneNumber::One, Command::SetRequestVolume, AnswerCode::StatusUpdate, vec![0x14])),
+                    Some(s) => assert_eq!(s, create_response(ZoneNumber::One, Command::SetRequestVolume, AnswerCode::StatusUpdate, &[0x14]).unwrap()),
                     None => assert!(false, "Failed to get a value from the response queue."),
                 };
 
@@ -114,7 +114,7 @@ fn communications_test() {
                     &create_request(ZoneNumber::One, Command::RequestCurrentSource, &[REQUEST_VALUE]).unwrap()
                 );
                 match rx_queue.next().await {
-                    Some(s) => assert_eq!(s, (ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::TUNER as u8])),
+                    Some(s) => assert_eq!(s, create_response(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, &[Source::TUNER as u8]).unwrap()),
                     None => assert!(false, "Failed to get a value from the response queue."),
                 };
 

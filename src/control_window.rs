@@ -32,6 +32,7 @@ use gtk::prelude::*;
 use crate::about;
 use crate::functionality;
 use crate::arcam_protocol::{Source, ZoneNumber};
+use std::borrow::BorrowMut;
 
 pub struct ControlWindow {
     window: gtk::ApplicationWindow,
@@ -95,14 +96,15 @@ impl ControlWindow {
             zone_2_mute,
             to_comms_manager: RefCell::new(None),
         });
-        //  TODO This channel is pre-processed in comms_manager::listen_to_reader,
-        //    Should this really be just getting a stream of bytes from comms_manager
-        //    to be processed in functionality to create the information from the data.
         let (tx_from_comms_manager, rx_from_comms_manager) = glib::MainContext::channel(glib::source::PRIORITY_DEFAULT);
         rx_from_comms_manager.attach(None, {
             let c_w = control_window.clone();
-            move |datum| {
-                functionality::process_response(&c_w, datum);
+            let mut queue = vec![];
+            move |datum: Vec<u8>| {  //  TODO Why is this type specification required?
+                for c in datum.iter() {
+                    queue.push(*c);
+                }
+                functionality::try_parse_of_response_data(&c_w, &mut queue);
                 Continue(true)
             }
         });

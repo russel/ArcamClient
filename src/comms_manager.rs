@@ -21,14 +21,9 @@ use gio;
 use gio::prelude::*;
 use glib;
 //use glib::prelude::*;
-//use gtk;
-//use gtk::prelude::*;
 
 use futures;
 use futures::StreamExt;
-
-use crate::arcam_protocol::parse_response;
-use crate::functionality::ResponseTuple;
 
 /*
  * ================================================================================
@@ -119,7 +114,7 @@ impl AsyncWrite for SocketConnection {
 
 async fn listen_to_reader(
     mut reader: futures::io::ReadHalf<SocketConnection>,
-    from_comms_manager: glib::Sender<ResponseTuple>
+    from_comms_manager: glib::Sender<Vec<u8>>
 ) {
     // TODO should the byte sequence parsing happen here or elsewhere?
     let mut queue: Vec<u8> = vec![];
@@ -139,33 +134,15 @@ async fn listen_to_reader(
         };
         //  TODO what happens if the amp is switched off (or put to sleep) during a connection?
         if count == 0 { break; }
-        //  TODO Should the comms manager be parsing the packets or should this move to functionality?
-        for i in 0..count {
-            queue.push(buffer[i]);
-        }
-        eprintln!("comms_manager::listen_to_reader: pushed values nto queue: {:?}", &queue);
-        match parse_response(&queue) {
-            Ok((zone, cc, ac, data, count)) => {
-                eprintln!("comms_manager::listen_to_reader: got a successful parse of a packet.");
-                for _ in 0..count { queue.pop(); }
-                match from_comms_manager.send((zone, cc, ac, data)) {
-                    Ok(_) => {},
-                    Err(e) => eprintln!("comms_manager::listen_to_reader: failed to send packet – {:?}.", e),
-                }
-            },
-            Err(e) => {
-                eprintln!("comms_manager::listen_to_reader: failed to parse a packet.");
-                match e {
-                    "Insufficient bytes to form a packet." => {},
-                    _ => panic!("XXXXX {}", e),
-                }
-            },
-        }
+        match from_comms_manager.send(buffer[..count].to_vec()) {
+            Ok(_) => {},
+            Err(e) => eprintln!("comms_manager::listen_to_reader: failed to send packet – {:?}.", e),
+        };
     }
 }
 
 async fn start_a_connection_and_set_up_event_listeners(
-    to_control_window: glib::Sender<ResponseTuple>,
+    to_control_window: glib::Sender<Vec<u8>>,
     mut to_comms_manager: futures::channel::mpsc::Receiver<Vec<u8>>,
     address: gio::NetworkAddress,
 ) {
@@ -192,7 +169,7 @@ async fn start_a_connection_and_set_up_event_listeners(
 
 /// Connect to an Arcam amp at the address given.
 pub fn connect_to_amp(
-    to_control_window: &glib::Sender<ResponseTuple>,
+    to_control_window: &glib::Sender<Vec<u8>>,
     address: &str,
     port_number: u16
 ) -> Result<futures::channel::mpsc::Sender<Vec<u8>>, String> {

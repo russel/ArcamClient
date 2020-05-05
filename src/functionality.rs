@@ -26,7 +26,7 @@ use std::rc::Rc;
 use gtk;
 use gtk::prelude::*;
 
-use crate::arcam_protocol::{AnswerCode, Command, ZoneNumber, REQUEST_VALUE, create_request};
+use crate::arcam_protocol::{AnswerCode, Command, ZoneNumber, REQUEST_VALUE, create_request, parse_response};
 use crate::comms_manager;
 use crate::control_window::ControlWindow;
 
@@ -35,7 +35,7 @@ pub type ResponseTuple = (ZoneNumber, Command, AnswerCode, Vec<u8>);
 
 /// Connect to an Arcam amp at the address given.
 pub fn connect_to_amp(
-    to_control_window: &glib::Sender<ResponseTuple>,
+    to_control_window: &glib::Sender<Vec<u8>>,
     address: &str,
     port_number: u16
 ) -> Result<futures::channel::mpsc::Sender<Vec<u8>>, String> {
@@ -119,7 +119,7 @@ pub fn initialise_control_window(control_window: &Rc<ControlWindow>) {
     get_mute_from_amp(control_window, ZoneNumber::Two);
 }
 
-pub fn process_response(control_window: &Rc<ControlWindow>, datum: ResponseTuple) {
+fn handle_response(control_window: &Rc<ControlWindow>, datum: ResponseTuple) {
     let (zone, cc, ac, value) = datum;
     // TODO Deal with non-StatusUpdate packets.
     assert_eq!(ac, AnswerCode::StatusUpdate);
@@ -168,3 +168,21 @@ pub fn process_response(control_window: &Rc<ControlWindow>, datum: ResponseTuple
     };
 }
 
+
+pub fn try_parse_of_response_data(control_window: &Rc<ControlWindow>, queue: &mut Vec<u8>) {
+    eprintln!("functionality::try_parse_of_response_data: starting parse on queue: {:?}", &queue);
+    match parse_response(&queue) {
+        Ok((zone, cc, ac, data, count)) => {
+            eprintln!("functionality::try_parse_of_response_data: got a successful parse of a packet.");
+            for _ in 0..count { queue.pop(); }
+            handle_response(control_window, (zone, cc, ac, data))
+        },
+        Err(e) => {
+            eprintln!("comms_manager::listen_to_reader: failed to parse a packet.");
+            match e {
+                "Insufficient bytes to form a packet." => {},
+                _ => panic!("XXXXX {}", e),
+            }
+        },
+    }
+}
