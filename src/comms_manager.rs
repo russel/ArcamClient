@@ -123,16 +123,16 @@ async fn listen_to_reader(
     // TODO should the byte sequence parsing happen here of elsewhere?
     let mut queue: Vec<u8> = vec![];
     let mut buffer = [0u8; 256];
-    eprintln!("$$$$  listen_to_reader: entering listen loop");
+    eprintln!("comms_manager::listen_to_reader: entering listen loop");
     loop {
         // TODO How to disconnect this listener when the connection is closed?
         let count = match reader.read(&mut buffer).await {
             Ok(s) => {
-                eprintln!("$$$$  listen_to_reader: got a packet: {:?}", &buffer[..s]);
+                eprintln!("comms_manager::listen_to_reader: got a packet: {:?}", &buffer[..s]);
                 s
             },
             Err(e) => {
-                eprintln!("$$$$  listen_to_reader: failed to read – {:?}", e);
+                eprintln!("comms_manager::listen_to_reader: failed to read – {:?}", e);
                 0
             },
         };
@@ -142,18 +142,18 @@ async fn listen_to_reader(
         for i in 0..count {
             queue.push(buffer[i]);
         }
-        eprintln!("$$$$  listen_to_reader: pushed values nto queue: {:?}", &queue);
+        eprintln!("comms_manager::listen_to_reader: pushed values nto queue: {:?}", &queue);
         match parse_response(&queue) {
             Ok((zone, cc, ac, data, count)) => {
-                eprintln!("$$$$  listen_to_reader: got a successful parse of a packet.");
+                eprintln!("comms_manager::listen_to_reader: got a successful parse of a packet.");
                 for _ in 0..count { queue.pop(); }
                 match from_comms_manager.send((zone, cc, ac, data)) {
                     Ok(_) => {},
-                    Err(e) => eprintln!("$$$$  listen_to_reader: failed to send packet – {:?}.", e),
+                    Err(e) => eprintln!("comms_manager::listen_to_reader: failed to send packet – {:?}.", e),
                 }
             },
             Err(e) => {
-                eprintln!("$$$$  listen_to_reader: failed to parse a packet.");
+                eprintln!("comms_manager::listen_to_reader: failed to parse a packet.");
                 match e {
                     "Insufficient bytes to form a packet." => {},
                     _ => panic!("XXXXX {}", e),
@@ -168,25 +168,25 @@ async fn start_a_connection_and_set_up_event_listeners(
     mut to_comms_manager: futures::channel::mpsc::Receiver<Vec<u8>>,
     address: gio::NetworkAddress,
 ) {
-    eprintln!("$$$$  start_a_connection_and_set_up_event_listeners: setting up connection to {:?}", address);
+    eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: setting up connection to {:?}", address);
     let client = SocketClient::new();
     let connection = match client.connect(&address).await {
         Ok(s) => { s },
-        Err(_) => { eprintln!("$$$$  start_a_connection_and_set_up_event_listeners: failed to connect to {}", address); return },
+        Err(_) => { eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: failed to connect to {}", address); return },
     };
     let (reader, mut writer) = connection.split();
     let context = glib::MainContext::default();
     context.spawn_local(async move {
         while let Some(data) = to_comms_manager.next().await {
-            eprintln!("$$$$  start_a_connection_and_set_up_event_listeners: writing {:?}", &data);
+            eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: writing {:?}", &data);
             match writer.write_all(&data).await {
-                Ok(_) => { eprintln!("$$$$  start_a_connection_and_set_up_event_listeners: successfully sent packet to amp {:?}", data) },
-                Err(e) => { eprintln!("$$$$  start_a_connection_and_set_up_event_listeners: error sending packet to amp {:?}", e) },
+                Ok(_) => { eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: successfully sent packet to amp {:?}", data) },
+                Err(e) => { eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: error sending packet to amp {:?}", e) },
             };
         }
     });
     context.spawn_local(listen_to_reader(reader, to_control_window));
-    eprintln!("$$$$  start_a_connection_and_set_up_event_listeners: set up connection to {:?}", address);
+    eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: set up connection to {:?}", address);
 }
 
 /// Connect to an Arcam amp at the address given.
@@ -195,7 +195,7 @@ pub fn connect_to_amp(
     address: &str,
     port_number: u16
 ) -> Result<futures::channel::mpsc::Sender<Vec<u8>>, String> {
-    eprintln!("$$$$  connect_to_amp: connecting to {:?}:{:?}", address, port_number);
+    eprintln!("comms_manager::connect_to_amp: connecting to {:?}:{:?}", address, port_number);
     let (tx_to_comms_manager, rx_to_comms_manager) = futures::channel::mpsc::channel(10);
     glib::MainContext::default().spawn_local(
         start_a_connection_and_set_up_event_listeners(
@@ -209,15 +209,5 @@ pub fn connect_to_amp(
 
 /// Terminate the current connection.
 pub fn disconnect_from_amp() {
-    /*
-    if (*control_window.socket_connection.borrow_mut()).is_some() {
-        eprintln!("$$$$  terminate_connection: closing current connection.");
-        match control_window.socket_connection.borrow().as_ref().unwrap().borrow_mut().close().await {
-            Ok(s) => {},
-            Err(e) => eprintln!("$$$$  terminate_connection: failed to close the connection: {:?}", e),
-        };
-    } else {
-        eprintln!("$$$$  terminate_connection: attempted to close a not open connection.");
-    };
-    */
+    
 }

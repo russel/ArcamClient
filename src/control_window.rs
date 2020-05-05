@@ -30,7 +30,6 @@ use gtk::prelude::*;
 //use futures;
 
 use crate::about;
-use crate::comms_manager;
 use crate::functionality;
 
 // Integration tests require all fields to be public.
@@ -122,20 +121,19 @@ impl ControlWindow {
                                 button.set_active(false);
                             } else {
                                 let address = address;
-                                eprintln!("Connect to {}:50000", &address);
-                                match comms_manager::connect_to_amp(
+                                eprintln!("control_window::connect_toggled: connect to {}:50000", &address);
+                                match functionality::connect_to_amp(
                                     &tx_from_comms_manager,
                                     &address.to_string(),
                                     50000,
                                 ) {
                                     Ok(s) => {
-                                        //  TODO How come a mutable borrow works here but not in functionality::check_status_and_send_request?
+                                        //  TODO How come a mutable borrow works here?
                                         //  TODO Why is the argument to replace here not an Option?
                                         c_w.to_comms_manager.borrow_mut().replace(s);
                                     },
-                                    Err(e) => eprintln!("Failed to connect to amp – {:?}", e),
+                                    Err(e) => eprintln!("control_window::connect_toggled: failed to connect to amp – {:?}", e),
                                 };
-
                                 // TODO put this back after experimentation.
                                 //functionality::initialise_control_window(&c_w);
                             }
@@ -154,8 +152,8 @@ impl ControlWindow {
                         },
                     };
                 } else {
-                    eprintln!("Terminate connection to amp.");
-                    comms_manager::disconnect_from_amp();
+                    eprintln!("control_window::connect_toggled: terminate connection to amp.");
+                    functionality::disconnect_from_amp();
                 }
             }
         });

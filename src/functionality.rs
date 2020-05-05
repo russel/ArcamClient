@@ -36,25 +36,38 @@ use gtk::prelude::*;
 use lazy_static::lazy_static;
 
 use crate::arcam_protocol::{AnswerCode, Command, ZoneNumber, REQUEST_VALUE, create_request};
+use crate::comms_manager;
 use crate::control_window::ControlWindow;
 
 pub type RequestTuple = (ZoneNumber, Command, Vec<u8>);
 pub type ResponseTuple = (ZoneNumber, Command, AnswerCode, Vec<u8>);
+
+/// Connect to an Arcam amp at the address given.
+pub fn connect_to_amp(
+    to_control_window: &glib::Sender<ResponseTuple>,
+    address: &str,
+    port_number: u16
+) -> Result<futures::channel::mpsc::Sender<Vec<u8>>, String> {
+    comms_manager::connect_to_amp(to_control_window, address, port_number)
+}
+
+/// Terminate the current connection.
+pub fn disconnect_from_amp() {
+}
 
 // For UI integration testing replace the function that sends a packet to the amplifier
 // with a function that sends the packet to a queue that can be checked by the testing
 // code.
 //
 // When compiling the ui_test crate we need these definitions. However when compiling
-// the communications_test crate we need a different definition, more like the above
+// the communications_test crate we need a different definition, more like the non-test
 // application definition. Fortunately, we only need the updated definition for here
 // for the ui_test, the definition needed for communication_test can be in that file/crate.
 
-#[cfg(not(test))]
 fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[u8]) {
     if control_window.connect.get_active() {
-        eprintln!("$$$$  check_status_and_send_request: send message to amp {:?}", request);
-        //  TODO How come mutable borrow fails here but succeeds in the connect_toggled method of control_window.connect?
+        eprintln!("functionality::check_status_and_send_request: send message to amp {:?}", request);
+        //  TODO How come mutable borrow works here?
         //  TODO Why is the argument to replace here not an Option?
         // Cannot use the content of control_window.to_comms_manager as mutable so get
         // it out first. Need a dummy Sender because there seems to be implicit
@@ -64,7 +77,7 @@ fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[
         let mut to_comms_manager = control_window.to_comms_manager.borrow_mut().replace(rx).unwrap();
         match to_comms_manager.try_send(request.to_vec()) {
             Ok(_) => {},
-            Err(e) => eprintln!("$$$$  check_status_and_send_request: failed to send packet – {:?}", e),
+            Err(e) => eprintln!("functionality::check_status_and_send_request: failed to send packet – {:?}", e),
         }
         control_window.to_comms_manager.borrow_mut().replace(to_comms_manager);
     } else {
@@ -78,16 +91,6 @@ fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[
         dialogue.run();
         dialogue.destroy();
     }
-}
-
-#[cfg(test)]
-lazy_static! {
-pub static ref TO_COMMS_MANAGER: Mutex<Vec<Vec<u8>>> = Mutex::new(vec![]);
-}
-
-#[cfg(test)]
-fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[u8]) {
-    // TODO Send something on the right channel so it can be tested in ui_test.
 }
 
 pub fn get_brightness_from_amp(control_window: &Rc<ControlWindow>) {
@@ -138,13 +141,6 @@ pub fn initialise_control_window(control_window: &Rc<ControlWindow>) {
     get_zone_2_mute_from_amp(control_window);
 }
 
-//  TODO Remove this test dependent stuff since the communications tests is not dependent on this code.
-
-// For communications integration testing replace the processing function that normally
-// dispatches UI events with a function that puts the messages on a queue so that they
-// can be checked by the testing code.
-
-#[cfg(not(test))]
 pub fn process_response(control_window: &Rc<ControlWindow>, datum: ResponseTuple) {
     let (zone, cc, ac, value) = datum;
     // TODO Deal with non-StatusUpdate packets.
@@ -170,17 +166,17 @@ pub fn process_response(control_window: &Rc<ControlWindow>, datum: ResponseTuple
             assert_eq!(value.len(), 16);
             let message = match String::from_utf8(value.to_vec()) {
                 Ok(s) => s.trim().to_string(),
-                Err(e) => { eprintln!("££££  process_response: failed to process {:?} – {:?}", value, e); "".to_string()},
+                Err(e) => { eprintln!("functionality::process_response: failed to process {:?} – {:?}", value, e); "".to_string()},
             };
-            eprintln!("££££  process_response: got the station name: {}", message);
+            eprintln!("functionality::process_response: got the station name: {}", message);
         }
         Command::ProgrammeTypeCategory => {
             assert_eq!(value.len(), 16);
             let message = match String::from_utf8(value.to_vec()) {
                 Ok(s) => s.trim().to_string(),
-                Err(e) => { eprintln!("££££  process_response: failed to process {:?} – {:?}", value, e); "".to_string()},
+                Err(e) => { eprintln!("functionality::process_response: failed to process {:?} – {:?}", value, e); "".to_string()},
             };
-            eprintln!("££££  process_response: got the station type: {}", message);
+            eprintln!("functionality::process_response: got the station type: {}", message);
         }
         Command::RequestRDSDLSInformation => {
             assert_eq!(value.len(), 129);
@@ -190,22 +186,10 @@ pub fn process_response(control_window: &Rc<ControlWindow>, datum: ResponseTuple
             };
             let message = match String::from_utf8(value[1..index_of_nul].to_vec()) {
                 Ok(s) => s.trim().to_string(),
-                Err(e) => { eprintln!("££££  process_response: failed to get a string – {}", e); "".to_string() },
+                Err(e) => { eprintln!("functionality::process_response: failed to get a string – {}", e); "".to_string() },
             };
-            eprintln!("££££  process_response: got the RDS DLS: {}", message);
+            eprintln!("functionality::process_response: got the RDS DLS: {}", message);
         }
         _ => {},
     };
-}
-
-#[cfg(test)]
-lazy_static! {
-pub static ref FROM_COMMS_MANAGER: Mutex<Vec<ResponseTuple>> = Mutex::new(vec![]);
-}
-
-#[cfg(test)]
-pub fn process_response(control_window: &Rc<ControlWindow>, datum: ResponseTuple) {
-    let (zone, cc, ac, value) = datum;
-    //eprintln!("££££  process_response: processing the response {:?}", datum);
-    FROM_COMMS_MANAGER.lock().unwrap().push((zone, cc, ac, value.to_vec()));
 }

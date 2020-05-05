@@ -29,7 +29,10 @@ use gtk::prelude::*;
 
 use futures;
 use futures::channel::mpsc::{Sender, Receiver};
-use futures::TryStreamExt;
+use futures::StreamExt;
+//use futures::TryStreamExt;
+//use futures::AsyncRead;
+//use futures_util::io::AsyncReadExt;
 
 use arcamclient::arcam_protocol::{
     ZoneNumber, Command, AnswerCode,
@@ -50,8 +53,8 @@ fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[
     let (rx, tx) = futures::channel::mpsc::channel(10);
     let mut to_comms_manager = control_window.to_comms_manager.borrow_mut().replace(rx).unwrap();
     match to_comms_manager.try_send(request.to_vec()) {
-        Ok(_) => eprintln!("~~~~  check_status_and_send_request: sent packet – {:?}", request),
-        Err(e) => eprintln!("~~~~  check_status_and_send_request: failed to send packet – {:?}", e),
+        Ok(_) => eprintln!("communications_test::check_status_and_send_request: sent packet – {:?}", request),
+        Err(e) => eprintln!("communications_test::check_status_and_send_request: failed to send packet – {:?}", e),
     }
     control_window.to_comms_manager.borrow_mut().replace(to_comms_manager);
 }
@@ -63,67 +66,75 @@ async fn terminate_application(control_window: Rc<ControlWindow>) {
 #[test]
 fn communications_test() {
     //  Start up an application but using a dummy UI.
-    let application = gtk::Application::new(Some("uk.org.winder.arcamclient"), gio::ApplicationFlags::empty()).unwrap();
-    application.connect_startup(
-        move |app| {
-            let control_window = Rc::new(ControlWindow {
-                window: gtk::ApplicationWindow::new(app),
-                address: Default::default(),
-                connect: Default::default(),
-                brightness: gtk::Label::new(Some("dummy")),
-                zone_1_adjustment: gtk::Adjustment::new(0.0, 0.0, 100.0, 1.0, 10.0, 10.0),
-                zone_1_mute: Default::default(),
-                zone_2_adjustment: gtk::Adjustment::new(0.0, 0.0, 100.0, 1.0, 10.0, 10.0),
-                zone_2_mute: Default::default(),
-                to_comms_manager: RefCell::new(None)
-            });
-            // Set up the mock AVR850 process.
-            eprintln!("~~~~  communications_test: making connection to {}", unsafe { PORT_NUMBER });
-            let (tx_from_comms_manager, rx_from_comms_manager) = glib::MainContext::channel(glib::source::PRIORITY_DEFAULT);
-            rx_from_comms_manager.attach(None,
-                move |datum| {
-                    eprintln!("~~~~  communications_test: got a response {:?}.", datum);
-                    assert_ne!(datum, (ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![0x01]));
-                    Continue(true)
-                }
-            );
-            match comms_manager::connect_to_amp( &tx_from_comms_manager, "127.0.0.1", unsafe { PORT_NUMBER }) {
-                Ok(s) => {
-                    eprintln!("~~~~  communications_test: connected to 127.0.0.1:{:?}.", unsafe{ PORT_NUMBER });
-                    *control_window.to_comms_manager.borrow_mut() = Some(s);
-                },
-                Err(e) => panic!("~~~~ communications_test: failed to connect to the mock amp."),
-            }
-            // Run the tests, but only after everything is working.
-            glib::source::timeout_add_seconds_local(2, {
-                let c_w = control_window.clone();
-                move || {
-                    if c_w.to_comms_manager.borrow().is_some() {
-                        eprintln!("~~~~  communications_test: running the test code.");
-
-                        check_status_and_send_request(&c_w, &create_request(ZoneNumber::One, Command::DisplayBrightness, &[REQUEST_VALUE]).unwrap());
-
-                        // now ned to async block on getting a result to test.
-
-                        eprintln!("~~~~  communications_test: send termination signal.");
-                        glib::source::timeout_add_seconds_local(5, {
-                            let cw = c_w.clone();
-                            move ||{
-                                cw.window.get_application().unwrap().quit();
-                                Continue(false)
-                            }
-                        });
-
-                        Continue(false)
-                    } else {
-                        Continue(true)
-                    }
-                }
-            });
+    let application = gtk::Application::new(Some("uk.org.winder.arcamclient.communications_test"), gio::ApplicationFlags::empty()).unwrap();
+    application.connect_startup(move |app| {
+        let control_window = Rc::new(ControlWindow {
+            window: gtk::ApplicationWindow::new(app),
+            address: Default::default(),
+            connect: Default::default(),
+            brightness: gtk::Label::new(Some("dummy")),
+            zone_1_adjustment: gtk::Adjustment::new(0.0, 0.0, 100.0, 1.0, 10.0, 10.0),
+            zone_1_mute: Default::default(),
+            zone_2_adjustment: gtk::Adjustment::new(0.0, 0.0, 100.0, 1.0, 10.0, 10.0),
+            zone_2_mute: Default::default(),
+            to_comms_manager: RefCell::new(None)
+        });
+        // Set up the mock AVR850 process.
+        eprintln!("communications_test::communications_test: making connection to {}", unsafe { PORT_NUMBER });
+        let (mut tx_queue, mut rx_queue) = futures::channel::mpsc::channel::<ResponseTuple>(10);
+        let (tx_from_comms_manager, rx_from_comms_manager) = glib::MainContext::channel::<ResponseTuple>(glib::source::PRIORITY_DEFAULT);
+        rx_from_comms_manager.attach(None, move |datum| {
+            eprintln!("communications_test::communications_test: got a response {:?}.", datum);
+            match tx_queue.try_send(datum) {
+                Ok(_) => {},
+                Err(e) => assert!(false, e),
+            };
+            Continue(true)
+        });
+        match comms_manager::connect_to_amp( &tx_from_comms_manager, "127.0.0.1", unsafe { PORT_NUMBER }) {
+            Ok(s) => {
+                eprintln!("communications_test::communications_test: connected to 127.0.0.1:{:?}.", unsafe{ PORT_NUMBER });
+                *control_window.to_comms_manager.borrow_mut() = Some(s);
+            },
+            Err(e) => panic!("~~~~ communications_test: failed to connect to the mock amp."),
         }
-    );
+        // Run the tests.
+        glib::MainContext::default().spawn_local({
+            let c_w = control_window.clone();
+            async move {
+                eprintln!("communications_test::communications_test: running the test code.");
+                assert!(c_w.to_comms_manager.borrow().is_some());
+
+                check_status_and_send_request(
+                    &c_w,
+                    &create_request(ZoneNumber::One, Command::DisplayBrightness, &[REQUEST_VALUE]).unwrap());
+                match rx_queue.next().await {
+                    Some(s) => assert_eq!(s, (ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![0x01])),
+                    None => assert!(false, "Failed to get a value from the response queue."),
+                };
+
+                check_status_and_send_request(&c_w,
+                &create_request(ZoneNumber::One, Command::SetRequestVolume, &[0x14]).unwrap()
+                );
+                match rx_queue.next().await {
+                    Some(s) => assert_eq!(s, (ZoneNumber::One, Command::SetRequestVolume, AnswerCode::StatusUpdate, vec![0x14])),
+                    None => assert!(false, "Failed to get a value from the response queue."),
+                };
+
+                // Terminate the application once all tests are run.
+                eprintln!("communications_test::communications_test: send termination signal.");
+                glib::source::timeout_add_seconds_local(2, {
+                    let cw = c_w.clone();
+                    move ||{
+                        cw.window.get_application().unwrap().quit();
+                        Continue(false)
+                    }
+                });
+            }
+        });
+    });
     application.connect_activate(|_|{}); // Avoids a warning.
-    eprintln!("~~~~  communications_test: starting the application event loop.");
+    eprintln!("communications_test::communications_test: starting the application event loop.");
     application.run(&[]);
-    eprintln!("~~~~  communications_test: the application event loop has terminated.");
+    eprintln!("communications_test::communications_test: the application event loop has terminated.");
 }
