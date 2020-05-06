@@ -54,7 +54,7 @@ pub fn disconnect_from_amp() {
 
 fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[u8]) {
     eprintln!("functionality::check_status_and_send_request: send message to amp {:?}", request);
-    if control_window.get_connect().get_active() {
+    if control_window.get_connect_chooser_value() {
         //  TODO How come mutable borrow works here?
         //  TODO Why is the argument to replace here not an Option?
         // Cannot use the content of control_window.to_comms_manager as mutable so get

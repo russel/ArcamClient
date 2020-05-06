@@ -270,11 +270,21 @@ impl ControlWindow {
 
     pub fn get_window(self: &Self) -> gtk::ApplicationWindow { self.window.clone() }
 
-    pub fn get_connect(self: &Self) -> gtk::CheckButton { self.connect_chooser.clone() }
-
     pub fn get_to_comms_manager(self: &Self) -> &RefCell<Option<futures::channel::mpsc::Sender<Vec<u8>>>> { &self.to_comms_manager }
 
-    pub fn get_brightness_display(self: &Self) -> Brightness {
+    pub fn get_connect_display_value(self: &Self) -> bool {
+        match self.connect_display.get_text().unwrap().as_str() {
+            "Connected" => true,
+            "Not connected" => false,
+            x => panic!("Illegal value in connect_display – {}", x),
+        }
+    }
+
+    pub fn get_connect_chooser_value(self: &Self) -> bool {
+        self.connect_chooser.get_active()
+    }
+
+    pub fn get_brightness_display_value(self: &Self) -> Brightness {
         match self.brightness_display.get_text().unwrap().as_str() {
             "Off" => Brightness::Off,
             "Level_1" => Brightness::Level1,
@@ -283,7 +293,7 @@ impl ControlWindow {
         }
     }
 
-    pub fn get_volume_display(self: &Self, zone: ZoneNumber) -> u8 {
+    pub fn get_volume_display_value(self: &Self, zone: ZoneNumber) -> u8 {
         match match zone {
             ZoneNumber::One => self.zone_1_volume_display.get_text(),
             ZoneNumber::Two => self.zone_2_volume_display.get_text(),
@@ -296,7 +306,7 @@ impl ControlWindow {
         }
     }
 
-    pub fn get_mute_display(self: &Self, zone: ZoneNumber) -> bool {
+    pub fn get_mute_display_value(self: &Self, zone: ZoneNumber) -> bool {
         match match zone {
             ZoneNumber::One => self.zone_1_mute_display.get_text(),
             ZoneNumber::Two => self.zone_2_mute_display.get_text(),
@@ -312,9 +322,9 @@ impl ControlWindow {
 
     //  Some methods needed for the integration tests.
 
-    pub fn set_address(self: &Self, address: &str) {
-        self.address.set_text(address);
-    }
+    pub fn get_connect_chooser(self: &Self) -> gtk::CheckButton { self.connect_chooser.clone() }
+
+    pub fn set_address(self: &Self, address: &str) { self.address.set_text(address); }
 
     pub fn create_dummy_control_window_for_testing(application: &gtk::Application) -> Self {
         let zone_1_adjustment = gtk::Adjustment::new(0.0, 0.0, 100.0, 1.0, 10.0, 10.0);

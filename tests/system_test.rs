@@ -43,22 +43,23 @@ use start_avr850::PORT_NUMBER;
 
 #[test]
 fn system_test_with_mock_amp() {
-    let application = gtk::Application::new(Some("uk.org.winder.arcamclient.ui_test"), gio::ApplicationFlags::empty()).unwrap();
+    let application = gtk::Application::new(Some("uk.org.winder.arcamclient.system_test"), gio::ApplicationFlags::empty()).unwrap();
     application.connect_startup(move |app| {
         let control_window = control_window::ControlWindow::new(&app);
 
         control_window.set_address("127.0.0.1");
-        control_window.get_connect().set_active(true);
+        control_window.get_connect_chooser().set_active(true);
 
         glib::source::timeout_add_seconds_local(1, {
             let c_w = control_window.clone();
             move ||{
 
-                assert_eq!(c_w.get_brightness_display(), Brightness::Level1);
-                assert_eq!(c_w.get_volume_display(ZoneNumber::One), 30);
-                assert!(c_w.get_mute_display(ZoneNumber::One));
-                assert_eq!(c_w.get_volume_display(ZoneNumber::Two), 20);
-                assert!(!c_w.get_mute_display(ZoneNumber::Two));
+                //assert!(c_w.get_connect_display_value());
+                assert_eq!(c_w.get_brightness_display_value(), Brightness::Level1);
+                assert_eq!(c_w.get_volume_display_value(ZoneNumber::One), 30);
+                assert!(c_w.get_mute_display_value(ZoneNumber::One));
+                assert_eq!(c_w.get_volume_display_value(ZoneNumber::Two), 20);
+                assert!(!c_w.get_mute_display_value(ZoneNumber::Two));
 
                 glib::source::timeout_add_seconds_local(1, {
                     let cw = c_w.clone();
