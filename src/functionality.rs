@@ -26,6 +26,9 @@ use std::rc::Rc;
 use gtk;
 use gtk::prelude::*;
 
+use num_derive::FromPrimitive;  // Apparently unused, but it is necessary.
+use num_traits::FromPrimitive;
+
 use crate::arcam_protocol::{AnswerCode, Command, ZoneNumber, REQUEST_VALUE, create_request, parse_response};
 use crate::comms_manager;
 use crate::control_window::ControlWindow;
@@ -126,7 +129,7 @@ fn handle_response(control_window: &Rc<ControlWindow>, zone: ZoneNumber, cc: Com
     match cc {
         Command::DisplayBrightness => {
             assert_eq!(datum.len(), 1);
-            control_window.set_brightness_display(datum[0])
+            control_window.set_brightness_display(FromPrimitive::from_u8(datum[0]).unwrap())
         },
         Command::SetRequestVolume => {
             assert_eq!(datum.len(), 1);
@@ -143,6 +146,7 @@ fn handle_response(control_window: &Rc<ControlWindow>, zone: ZoneNumber, cc: Com
                 Err(e) => { eprintln!("functionality::handle_response: failed to process {:?} – {:?}", &datum, e); "".to_string()},
             };
             eprintln!("functionality::handle_response: got the station name: {}", message);
+            control_window.set_radio_station_display(&message);
         }
         Command::ProgrammeTypeCategory => {
             assert_eq!(datum.len(), 16);
@@ -151,6 +155,7 @@ fn handle_response(control_window: &Rc<ControlWindow>, zone: ZoneNumber, cc: Com
                 Err(e) => { eprintln!("functionality::handle_response: failed to process {:?} – {:?}", &datum, e); "".to_string()},
             };
             eprintln!("functionality::handle_response: got the station type: {}", message);
+            control_window.set_music_type_display(&message);
         }
         Command::RequestRDSDLSInformation => {
             assert_eq!(datum.len(), 129);
@@ -163,9 +168,15 @@ fn handle_response(control_window: &Rc<ControlWindow>, zone: ZoneNumber, cc: Com
                 Err(e) => { eprintln!("functionality::handle_response: failed to get a string – {}", e); "".to_string() },
             };
             eprintln!("functionality::handle_response: got the RDS DLS: {}", message);
+            control_window.set_rds_dls(&message);
         }
+        Command::RequestCurrentSource => {
+            assert_eq!(datum.len(), 1);
+            control_window.set_source_display(FromPrimitive::from_u8(datum[0]).unwrap());
+        },
         x => eprintln!("functionality::handle_response: failed to deal with command {:?}", x),
     };
+    control_window.set_connect_display(true);
 }
 
 

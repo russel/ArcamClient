@@ -132,31 +132,31 @@ fn create_command_response(zone: ZoneNumber, cc: Command, values: &[u8], amp_sta
 
 /// Handle a connection from a remote client.
 fn handle_client(stream: &mut TcpStream, amp_state: &mut AmpState) {
-    eprintln!("####  mock_avr850: got a connection from {}", stream.peer_addr().unwrap());
+    eprintln!("mock_avr850: got a connection from {}", stream.peer_addr().unwrap());
     loop {
         let mut buffer = [0; 256];
         match stream.read(&mut buffer) {
             Ok(count) => {
                 if count > 0 {
                     let mut data = &buffer[..count];
-                    eprintln!("####  mock_avr850: got a message {:?}", data);
+                    eprintln!("mock_avr850: got a message {:?}", data);
                     // TODO Assume each is a complete packet and only one packet.
                     //   This may not be a good assumption even for the integration testing.
                     // Remove the output so as to speed up processing which then gets multiple packets to the client very quickly.
                     if data[0] == PACKET_START {
-                        eprintln!("####  mock_avr850: processing Arcam request {:?}", data);
+                        eprintln!("mock_avr850: processing Arcam request {:?}", data);
                         // TODO  How to deal with a buffer that has multiple packets?
                         loop {
                             match parse_request(data) {
                                 Ok((zone, cc, values, count)) => {
                                     data = &data[count..];
-                                    eprintln!("####  mock_avr850: got a parse of ({:?}, {:?}, {:?}), data left {:?}", zone, cc, values, &data);
-                                    eprintln!("####  mock_avr850: sending back {:?}", &create_command_response(zone, cc, &values, amp_state).unwrap());
+                                    eprintln!("mock_avr850: got a parse of ({:?}, {:?}, {:?}), data left {:?}", zone, cc, values, &data);
+                                    eprintln!("mock_avr850: sending back {:?}", &create_command_response(zone, cc, &values, amp_state).unwrap());
                                     stream.write(&create_command_response(zone, cc, &values, amp_state).unwrap())
-                                        .expect("####  mock_avr850: failed to write response");
+                                        .expect("mock_avr850: failed to write response");
                                 },
                                 Err(e) => {
-                                    eprintln!("####  mock_avr850: failed to parse an apparent Arcam request: {:?}, {:?}", data, e);
+                                    eprintln!("mock_avr850: failed to parse an apparent Arcam request: {:?}, {:?}", data, e);
                                     break;
                                 },
                             }
@@ -167,21 +167,21 @@ fn handle_client(stream: &mut TcpStream, amp_state: &mut AmpState) {
                                 let message = s.trim();
                                 if message == "AMX" {
                                     stream.write("AMXB<Device-SDKClass=Receiver><Device-Make=ARCAM><Device-Model=AVR850><Device-Revision=2.0.0>\r".as_bytes())
-                                        .expect("####  mock_avr850: failed to write AMX response");
+                                        .expect("mock_avr850: failed to write AMX response");
                                 } else {
-                                    println!("####  mock_avr850: unknown message, doing nothing.");
+                                    println!("mock_avr850: unknown message, doing nothing.");
                                 }
                             },
-                            Err(e) => println!("####  mock_avr850: buffer is not a string: {:?}", e),
+                            Err(e) => println!("mock_avr850: buffer is not a string: {:?}", e),
                         }
                     }
                 } else {
-                    println!("####  mock_avr850: no data read, assuming connection closed.");
+                    println!("mock_avr850: no data read, assuming connection closed.");
                     break;
                 }
             },
             Err(e) => {
-                println!("####  mock_avr850: read error: {:?}", e);
+                println!("mock_avr850: read error: {:?}", e);
                 break;
             }
         }
@@ -197,17 +197,17 @@ fn create_default_amp_then_listen_on(address: &SocketAddr) -> Result<(), ()> {
     let mut amp_state: AmpState = Default::default();
     match TcpListener::bind(address) {
         Ok(listener) => {
-            println!("####  mock_avr850: server bound to {}", address);
+            println!("mock_avr850: server bound to {}", address);
             for stream in listener.incoming() {
                 match stream {
                     Ok(mut s) => handle_client(&mut s, &mut amp_state),
-                    Err(e) => println!("####  mock_avr850: failed to get incoming connection: {:?}", e),
+                    Err(e) => println!("mock_avr850: failed to get incoming connection: {:?}", e),
                 }
             }
             Ok(())
         },
         Err(e) => {
-            println!("####  mock_avr850: failed to bind to {}: {:?}", address, e);
+            println!("mock_avr850: failed to bind to {}: {:?}", address, e);
             Err(())
         }
     }
@@ -221,7 +221,7 @@ fn create_default_amp_then_listen_on(address: &SocketAddr) -> Result<(), ()> {
 /// avoid "Unable to bind socket: Address already in use".
 fn main() -> Result<(), ()>{
     let args: Vec<String> = args().collect();
-    println!("####  mock_avr850: args are {:?}", args);
+    println!("mock_avr850: args are {:?}", args);
     let default_port_number = 50000;
     let port_number = if args.len() > 1 { args[1].parse::<u16>().unwrap_or(default_port_number) } else { default_port_number };
     create_default_amp_then_listen_on(&SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port_number))

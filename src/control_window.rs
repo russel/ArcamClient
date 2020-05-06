@@ -55,6 +55,10 @@ pub struct ControlWindow {
     zone_2_volume_chooser: gtk::SpinButton,
     zone_2_mute_display: gtk::Label,
     zone_2_mute_chooser: gtk::CheckButton,
+    radio_data: gtk::Box,
+    radio_station_display: gtk::Label,
+    music_type_display: gtk::Label,
+    rds_dls: gtk::Label,
     to_comms_manager: RefCell<Option<futures::channel::mpsc::Sender<Vec<u8>>>>,
 }
 
@@ -73,8 +77,22 @@ impl ControlWindow {
         let header_bar = gtk::HeaderBar::new();
         header_bar.set_title(Some("ArcamClient"));
         header_bar.set_show_close_button(true);
+        header_bar.show();
         let menu_button = gtk::MenuButton::new();
         menu_button.set_image(Some(&gtk::Image::new_from_icon_name(Some("open-menu-symbolic"), gtk::IconSize::Button.into())));
+        menu_button.show();
+        let menu_builder = gtk::Builder::new_from_string(include_str!("resources/application_menu.xml"));
+        let application_menu: gio::Menu = menu_builder.get_object("application_menu").unwrap();
+        let about_action = gio::SimpleAction::new("about", None);
+        about_action.connect_activate({
+            let w = window.clone();
+            move |_, _| about::present(Some(&w))
+        });
+        window.add_action(&about_action);
+        menu_button.set_menu_model(Some(&application_menu));
+        header_bar.pack_end(&menu_button);
+        window.set_titlebar(Some(&header_bar));
+        window.show();
         let address: gtk::Entry = builder.get_object("address").unwrap();
         let connect_display: gtk::Label = builder.get_object("connect_display").unwrap();
         let connect_chooser: gtk::CheckButton = builder.get_object("connect_chooser").unwrap();
@@ -90,18 +108,10 @@ impl ControlWindow {
         let zone_2_volume_chooser: gtk::SpinButton = builder.get_object("zone_2_volume_chooser").unwrap();
         let zone_2_mute_display: gtk::Label = builder.get_object("zone_2_mute_display").unwrap();
         let zone_2_mute_chooser: gtk::CheckButton = builder.get_object("zone_2_mute_chooser").unwrap();
-        let menu_builder = gtk::Builder::new_from_string(include_str!("resources/application_menu.xml"));
-        let application_menu: gio::Menu = menu_builder.get_object("application_menu").unwrap();
-        let about_action = gio::SimpleAction::new("about", None);
-        about_action.connect_activate({
-            let w = window.clone();
-            move |_, _| about::present(Some(&w))
-        });
-        window.add_action(&about_action);
-        menu_button.set_menu_model(Some(&application_menu));
-        header_bar.pack_end(&menu_button);
-        window.set_titlebar(Some(&header_bar));
-        window.show_all();
+        let radio_data: gtk::Box = builder.get_object("radio_data").unwrap();
+        let radio_station_display: gtk::Label = builder.get_object("radio_station_display").unwrap();
+        let music_type_display: gtk::Label = builder.get_object("music_type_display").unwrap();
+        let rds_dls: gtk::Label = builder.get_object("RDS_DLS").unwrap();
         let control_window = Rc::new(ControlWindow {
             window,
             address,
@@ -119,6 +129,10 @@ impl ControlWindow {
             zone_2_volume_chooser,
             zone_2_mute_display,
             zone_2_mute_chooser,
+            radio_data,
+            radio_station_display,
+            music_type_display,
+            rds_dls,
             to_comms_manager: RefCell::new(None),
         });
         let (tx_from_comms_manager, rx_from_comms_manager) = glib::MainContext::channel(glib::source::PRIORITY_DEFAULT);
@@ -222,19 +236,29 @@ impl ControlWindow {
         control_window
     }
 
+    pub fn set_connect_display(self: &Self, on: bool) {
+        self.connect_display.set_text(if on { "Connected" } else { "Not connected" });
+    }
+
     pub fn set_source_display(self: &Self, source: Source) {
         self.source_display.set_text(&format!("{:?}", source));
+        if source == Source::TUNER { self.radio_data.show(); }
+        else { self.radio_data.hide(); }
+        self.set_source_chooser(source);
     }
 
-    pub fn set_brightness_display(self: &Self, level: u8) {
-        assert!(level < 3);
-        let brightness_id= if level == 0 { "Off".to_string() } else { "Level_".to_string() + &level.to_string() };
+    pub fn set_source_chooser(self: &Self, source: Source) {
+        self.source_chooser.set_active_id(Some(&format!("{:?}", source)));
+    }
+
+    pub fn set_brightness_display(self: &Self, level: Brightness) {
+        let brightness_id= format!("{:?}", level);
         self.brightness_display.set_text(&brightness_id);
+        self.set_brightness_chooser(level);
     }
 
-    pub fn set_brightness_chooser(self: &Self, level: u8) {
-        assert!(level < 3);
-        let brightness_id= if level == 0 { "Off".to_string() } else { "Level_".to_string() + &level.to_string() };
+    pub fn set_brightness_chooser(self: &Self, level: Brightness) {
+        let brightness_id= format!("{:?}", level);
         self.brightness_chooser.set_active_id(Some(&brightness_id));
     }
 
@@ -270,6 +294,21 @@ impl ControlWindow {
         }
     }
 
+    pub fn set_radio_station_display(self: &Self, station: &str) {
+        self.radio_station_display.set_text(station);
+        self.radio_data.show();
+    }
+
+    pub fn set_music_type_display(self: &Self, style: &str) {
+        self.music_type_display.set_text(style);
+        self.radio_data.show();
+    }
+
+    pub fn set_rds_dls(self: &Self, text: &str) {
+        self.rds_dls.set_text(text);
+        self.radio_data.show();
+    }
+
     pub fn get_application(self: &Self) -> Option<gtk::Application> { self.window.get_application() }
 
     pub fn get_window(self: &Self) -> gtk::ApplicationWindow { self.window.clone() }
@@ -291,8 +330,8 @@ impl ControlWindow {
     pub fn get_brightness_display_value(self: &Self) -> Brightness {
         match self.brightness_display.get_text().unwrap().as_str() {
             "Off" => Brightness::Off,
-            "Level_1" => Brightness::Level1,
-            "Level_2" => Brightness::Level2,
+            "Level1" => Brightness::Level1,
+            "Level2" => Brightness::Level2,
             x => panic!("Illegal brightness value from display – {}", x),
         }
     }
@@ -350,6 +389,10 @@ impl ControlWindow {
             zone_2_volume_chooser: gtk::SpinButton::new(Some(&zone_2_adjustment), 1.0, 3),
             zone_2_mute_display: gtk::Label::new(None),
             zone_2_mute_chooser: gtk::CheckButton::new(),
+            radio_data: gtk::Box::new(gtk::Orientation::Horizontal, 10),
+            radio_station_display: gtk::Label::new(None),
+            music_type_display: gtk::Label::new(None),
+            rds_dls: gtk::Label::new(None),
             to_comms_manager: RefCell::new(None)
         }
     }

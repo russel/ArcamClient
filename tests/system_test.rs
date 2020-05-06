@@ -35,10 +35,6 @@ use arcamclient::comms_manager;
 use arcamclient::control_window;
 use arcamclient::functionality;
 
-async fn terminate_application(control_window: Rc<control_window::ControlWindow>) {
-    control_window.get_application().unwrap().quit();
-}
-
 use start_avr850::PORT_NUMBER;
 
 #[test]
