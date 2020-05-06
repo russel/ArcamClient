@@ -37,13 +37,20 @@ use std::borrow::BorrowMut;
 pub struct ControlWindow {
     window: gtk::ApplicationWindow,
     address: gtk::Entry,
-    connect: gtk::CheckButton,
-    source: gtk::Label,
-    brightness: gtk::ComboBoxText,
-    zone_1_volume: gtk::SpinButton,
-    zone_1_mute: gtk::CheckButton,
-    zone_2_volume: gtk::SpinButton,
-    zone_2_mute: gtk::CheckButton,
+    connect_display: gtk::Label,
+    connect_chooser: gtk::CheckButton,
+    source_display: gtk::Label,
+    source_chooser: gtk::ComboBoxText,
+    brightness_display: gtk::Label,
+    brightness_chooser: gtk::ComboBoxText,
+    zone_1_volume_display: gtk::Label,
+    zone_1_volume_chooser: gtk::SpinButton,
+    zone_1_mute_display: gtk::Label,
+    zone_1_mute_chooser: gtk::CheckButton,
+    zone_2_volume_display: gtk::Label,
+    zone_2_volume_chooser: gtk::SpinButton,
+    zone_2_mute_display: gtk::Label,
+    zone_2_mute_chooser: gtk::CheckButton,
     to_comms_manager: RefCell<Option<futures::channel::mpsc::Sender<Vec<u8>>>>,
 }
 
@@ -65,13 +72,20 @@ impl ControlWindow {
         let menu_button = gtk::MenuButton::new();
         menu_button.set_image(Some(&gtk::Image::new_from_icon_name(Some("open-menu-symbolic"), gtk::IconSize::Button.into())));
         let address: gtk::Entry = builder.get_object("address").unwrap();
-        let connect: gtk::CheckButton = builder.get_object("connect").unwrap();
-        let source: gtk::Label = builder.get_object("source").unwrap();
-        let brightness: gtk::ComboBoxText = builder.get_object("brightness").unwrap();
-        let zone_1_volume: gtk::SpinButton = builder.get_object("zone_1_volume").unwrap();
-        let zone_1_mute: gtk::CheckButton = builder.get_object("zone_1_mute").unwrap();
-        let zone_2_volume: gtk::SpinButton = builder.get_object("zone_2_volume").unwrap();
-        let zone_2_mute: gtk::CheckButton = builder.get_object("zone_2_mute").unwrap();
+        let connect_display: gtk::Label = builder.get_object("connect_display").unwrap();
+        let connect_chooser: gtk::CheckButton = builder.get_object("connect_chooser").unwrap();
+        let source_display: gtk::Label = builder.get_object("source_display").unwrap();
+        let source_chooser: gtk::ComboBoxText= builder.get_object("source_chooser").unwrap();
+        let brightness_display: gtk::Label = builder.get_object("brightness_display").unwrap();
+        let brightness_chooser: gtk::ComboBoxText = builder.get_object("brightness_chooser").unwrap();
+        let zone_1_volume_display: gtk::Label = builder.get_object("zone_1_volume_display").unwrap();
+        let zone_1_volume_chooser: gtk::SpinButton = builder.get_object("zone_1_volume_chooser").unwrap();
+        let zone_1_mute_display: gtk::Label = builder.get_object("zone_1_mute_display").unwrap();
+        let zone_1_mute_chooser: gtk::CheckButton = builder.get_object("zone_1_mute_chooser").unwrap();
+        let zone_2_volume_display: gtk::Label = builder.get_object("zone_2_volume_display").unwrap();
+        let zone_2_volume_chooser: gtk::SpinButton = builder.get_object("zone_2_volume_chooser").unwrap();
+        let zone_2_mute_display: gtk::Label = builder.get_object("zone_2_mute_display").unwrap();
+        let zone_2_mute_chooser: gtk::CheckButton = builder.get_object("zone_2_mute_chooser").unwrap();
         let menu_builder = gtk::Builder::new_from_string(include_str!("resources/application_menu.xml"));
         let application_menu: gio::Menu = menu_builder.get_object("application_menu").unwrap();
         let about_action = gio::SimpleAction::new("about", None);
@@ -87,13 +101,20 @@ impl ControlWindow {
         let control_window = Rc::new(ControlWindow {
             window,
             address,
-            connect,
-            source,
-            brightness,
-            zone_1_volume,
-            zone_1_mute,
-            zone_2_volume,
-            zone_2_mute,
+            connect_display,
+            connect_chooser,
+            source_display,
+            source_chooser,
+            brightness_display,
+            brightness_chooser,
+            zone_1_volume_display,
+            zone_1_volume_chooser,
+            zone_1_mute_display,
+            zone_1_mute_chooser,
+            zone_2_volume_display,
+            zone_2_volume_chooser,
+            zone_2_mute_display,
+            zone_2_mute_chooser,
             to_comms_manager: RefCell::new(None),
         });
         let (tx_from_comms_manager, rx_from_comms_manager) = glib::MainContext::channel(glib::source::PRIORITY_DEFAULT);
@@ -108,7 +129,7 @@ impl ControlWindow {
                 Continue(true)
             }
         });
-        control_window.connect.connect_toggled({
+        control_window.connect_chooser.connect_toggled({
             let c_w = control_window.clone();
             move |button| {
                 // NB this is the state after the UI activity that caused the event that called the closure.
@@ -164,25 +185,25 @@ impl ControlWindow {
                 }
             }
         });
-        control_window.zone_1_volume.connect_changed({
+        control_window.zone_1_volume_chooser.connect_changed({
             let c_w = control_window.clone();
             move |button| {
                 functionality::set_volume_on_amp(&c_w, ZoneNumber::One, button.get_value());
             }
         });
-        control_window.zone_1_mute.connect_toggled({
+        control_window.zone_1_mute_chooser.connect_toggled({
             let c_w = control_window.clone();
             move |button| {
                 functionality::set_mute_on_amp(&c_w, ZoneNumber::One, button.get_active())
             }
         });
-        control_window.zone_2_volume.connect_changed({
+        control_window.zone_2_volume_chooser.connect_changed({
             let c_w = control_window.clone();
             move |button| {
                 functionality::set_volume_on_amp(&c_w, ZoneNumber::Two, button.get_value());
             }
         });
-        control_window.zone_2_mute.connect_toggled({
+        control_window.zone_2_mute_chooser.connect_toggled({
             let c_w = control_window.clone();
             move |button| {
                 functionality::set_mute_on_amp(&c_w, ZoneNumber::Two, button.get_active())
@@ -191,28 +212,51 @@ impl ControlWindow {
         control_window
     }
 
-    pub fn set_source(self: &Self, source: Source) {
-        self.source.set_text(&format!("{:?}", source));
+    pub fn set_source_display(self: &Self, source: Source) {
+        self.source_display.set_text(&format!("{:?}", source));
     }
 
-    pub fn set_brightness(self: &Self, level: u8) {
+    pub fn set_brightness_display(self: &Self, level: u8) {
         assert!(level < 3);
         let brightness_id= if level == 0 { "Off".to_string() } else { "Level_".to_string() + &level.to_string() };
-        self.brightness.set_active_id(Some(&brightness_id));
+        self.brightness_display.set_text(&brightness_id);
     }
 
-    pub fn set_mute(self: &Self, zone: ZoneNumber, on_off: bool) {
+    pub fn set_brightness_chooser(self: &Self, level: u8) {
+        assert!(level < 3);
+        let brightness_id= if level == 0 { "Off".to_string() } else { "Level_".to_string() + &level.to_string() };
+        self.brightness_chooser.set_active_id(Some(&brightness_id));
+    }
+
+    pub fn set_mute_display(self: &Self, zone: ZoneNumber, on_off: bool) {
+        let text = if on_off { "On" } else { "Muted" };
         match zone {
-            ZoneNumber::One => self.zone_1_mute.set_mode(on_off),
-            ZoneNumber::Two => self.zone_2_mute.set_mode(on_off),
+            ZoneNumber::One => self.zone_1_mute_display.set_text(text),
+            ZoneNumber::Two => self.zone_2_mute_display.set_text(text),
         }
     }
 
-    pub fn set_volume(self: &Self, zone: ZoneNumber, volume: f64) {
+    pub fn set_mute_chooser(self: &Self, zone: ZoneNumber, on_off: bool) {
+        match zone {
+            ZoneNumber::One => self.zone_1_mute_chooser.set_mode(on_off),
+            ZoneNumber::Two => self.zone_2_mute_chooser.set_mode(on_off),
+        }
+    }
+
+    pub fn set_volume_display(self: &Self, zone: ZoneNumber, volume: f64) {
+        assert!(volume < 100.0);
+        let text = volume.to_string();
+        match zone {
+            ZoneNumber::One => self.zone_1_volume_display.set_text(&text),
+            ZoneNumber::Two => self.zone_2_volume_display.set_text(&text),
+        }
+    }
+
+    pub fn set_volume_chooser(self: &Self, zone: ZoneNumber, volume: f64) {
         assert!(volume < 100.0);
         match zone {
-            ZoneNumber::One => self.zone_1_volume.set_value(volume),
-            ZoneNumber::Two => self.zone_2_volume.set_value(volume),
+            ZoneNumber::One => self.zone_1_volume_chooser.set_value(volume),
+            ZoneNumber::Two => self.zone_2_volume_chooser.set_value(volume),
         }
     }
 
@@ -220,7 +264,7 @@ impl ControlWindow {
 
     pub fn get_window(self: &Self) -> gtk::ApplicationWindow { self.window.clone() }
 
-    pub fn get_connect(self: &Self) -> gtk::CheckButton { self.connect.clone() }
+    pub fn get_connect(self: &Self) -> gtk::CheckButton { self.connect_chooser.clone() }
 
     pub fn get_to_comms_manager(self: &Self) -> &RefCell<Option<futures::channel::mpsc::Sender<Vec<u8>>>> { &self.to_comms_manager }
 
@@ -236,13 +280,20 @@ impl ControlWindow {
         ControlWindow {
             window: gtk::ApplicationWindow::new(application),
             address: gtk::Entry::new(),
-            connect: gtk::CheckButton::new(),
-            source: gtk::Label::new(Some("Unknown")),
-            brightness: gtk::ComboBoxText::new(),
-            zone_1_volume: gtk::SpinButton::new(Some(&zone_1_adjustment), 1.0, 3),
-            zone_1_mute: gtk::CheckButton::new(),
-            zone_2_volume: gtk::SpinButton::new(Some(&zone_2_adjustment), 1.0, 3),
-            zone_2_mute: gtk::CheckButton::new(),
+            connect_display: gtk::Label::new(None),
+            connect_chooser: gtk::CheckButton::new(),
+            source_display: gtk::Label::new(None),
+            source_chooser: gtk::ComboBoxText::new(),
+            brightness_display: gtk::Label::new(None),
+            brightness_chooser: gtk::ComboBoxText::new(),
+            zone_1_volume_display: gtk::Label::new(None),
+            zone_1_volume_chooser: gtk::SpinButton::new(Some(&zone_1_adjustment), 1.0, 3),
+            zone_1_mute_display: gtk::Label::new(None),
+            zone_1_mute_chooser: gtk::CheckButton::new(),
+            zone_2_volume_display: gtk::Label::new(None),
+            zone_2_volume_chooser: gtk::SpinButton::new(Some(&zone_2_adjustment), 1.0, 3),
+            zone_2_mute_display: gtk::Label::new(None),
+            zone_2_mute_chooser: gtk::CheckButton::new(),
             to_comms_manager: RefCell::new(None)
         }
     }

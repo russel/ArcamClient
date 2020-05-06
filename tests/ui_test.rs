@@ -64,7 +64,7 @@ fn ui_test() {
                 eprintln!("ui_test::ui_test: set Zone 1 volume");
                 // This should trigger a change to an volume ScrollButton and therefore
                 // send a message to the amp.
-                control_window.set_volume(ZoneNumber::One, 20.0);
+                control_window.set_volume_chooser(ZoneNumber::One, 20.0);
 
                 eprintln!("ui_test::ui_test: await packet on queue of packet to comms_manager.");
                 match rx_queue.next().await {

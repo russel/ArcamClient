@@ -126,15 +126,15 @@ fn handle_response(control_window: &Rc<ControlWindow>, datum: ResponseTuple) {
     match cc {
         Command::DisplayBrightness => {
             assert_eq!(value.len(), 1);
-            control_window.set_brightness(value[0])
+            control_window.set_brightness_display(value[0])
         },
         Command::SetRequestVolume => {
             assert_eq!(value.len(), 1);
-            control_window.set_volume(zone, value[0] as f64);
+            control_window.set_volume_display(zone, value[0] as f64);
         },
         Command::RequestMuteStatus => {
             assert_eq!(value.len(), 1);
-            control_window.set_mute(zone, value[0] != 0);
+            control_window.set_mute_display(zone, value[0] != 0);
         },
         Command::RequestDABStation => {
             assert_eq!(value.len(), 16);

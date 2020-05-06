@@ -84,8 +84,20 @@
               </packing>
             </child>
             <child>
-              <object class="GtkCheckButton" id="connect">
-                <property name="label" translatable="yes">Connect</property>
+              <object class="GtkLabel" id="connect_display">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="label" translatable="yes">Not connected</property>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkCheckButton" id="connect_chooser">
+                <property name="label" translatable="yes">Connect request</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">False</property>
@@ -96,7 +108,7 @@
               <packing>
                 <property name="expand">True</property>
                 <property name="fill">True</property>
-                <property name="position">1</property>
+                <property name="position">2</property>
               </packing>
             </child>
           </object>
@@ -184,7 +196,18 @@
                               </packing>
                             </child>
                             <child>
-                              <object class="GtkSpinButton" id="zone_1_volume">
+                              <object class="GtkLabel" id="zone_1_volume_display">
+                                <property name="visible">True</property>
+                                <property name="can_focus">False</property>
+                              </object>
+                              <packing>
+                                <property name="expand">True</property>
+                                <property name="fill">True</property>
+                                <property name="position">1</property>
+                              </packing>
+                            </child>
+                            <child>
+                              <object class="GtkSpinButton" id="zone_1_volume_chooser">
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="halign">end</property>
@@ -199,7 +222,7 @@
                                 <property name="expand">False</property>
                                 <property name="fill">True</property>
                                 <property name="pack_type">end</property>
-                                <property name="position">1</property>
+                                <property name="position">2</property>
                               </packing>
                             </child>
                           </object>
@@ -232,8 +255,19 @@
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkCheckButton" id="zone_1_mute">
-                            <property name="label" translatable="yes">Mute</property>
+                          <object class="GtkLabel" id="zone_1_mute_display">
+                            <property name="visible">True</property>
+                            <property name="can_focus">False</property>
+                          </object>
+                          <packing>
+                            <property name="expand">True</property>
+                            <property name="fill">True</property>
+                            <property name="position">1</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkCheckButton" id="zone_1_mute_chooser">
+                            <property name="label" translatable="yes">Mute request</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
@@ -243,7 +277,7 @@
                           <packing>
                             <property name="expand">True</property>
                             <property name="fill">True</property>
-                            <property name="position">1</property>
+                            <property name="position">2</property>
                           </packing>
                         </child>
                       </object>
@@ -306,7 +340,18 @@
                               </packing>
                             </child>
                             <child>
-                              <object class="GtkSpinButton" id="zone_2_volume">
+                              <object class="GtkLabel" id="zone_2_volume_display">
+                                <property name="visible">True</property>
+                                <property name="can_focus">False</property>
+                              </object>
+                              <packing>
+                                <property name="expand">True</property>
+                                <property name="fill">True</property>
+                                <property name="position">1</property>
+                              </packing>
+                            </child>
+                            <child>
+                              <object class="GtkSpinButton" id="zone_2_volume_chooser">
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="halign">end</property>
@@ -321,7 +366,7 @@
                                 <property name="expand">False</property>
                                 <property name="fill">True</property>
                                 <property name="pack_type">end</property>
-                                <property name="position">1</property>
+                                <property name="position">2</property>
                               </packing>
                             </child>
                           </object>
@@ -354,8 +399,19 @@
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkCheckButton" id="zone_2_mute">
-                            <property name="label" translatable="yes">Mute</property>
+                          <object class="GtkLabel" id="zone_2_mute_display">
+                            <property name="visible">True</property>
+                            <property name="can_focus">False</property>
+                          </object>
+                          <packing>
+                            <property name="expand">True</property>
+                            <property name="fill">True</property>
+                            <property name="position">1</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkCheckButton" id="zone_2_mute_chooser">
+                            <property name="label" translatable="yes">Mute request</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
@@ -366,7 +422,7 @@
                             <property name="expand">True</property>
                             <property name="fill">True</property>
                             <property name="pack_type">end</property>
-                            <property name="position">1</property>
+                            <property name="position">2</property>
                           </packing>
                         </child>
                       </object>
@@ -431,19 +487,25 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkLabel" id="source">
+                      <object class="GtkLabel" id="source_display">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="margin_left">10</property>
-                        <property name="margin_right">10</property>
-                        <property name="margin_top">10</property>
-                        <property name="margin_bottom">10</property>
                       </object>
                       <packing>
                         <property name="expand">True</property>
                         <property name="fill">True</property>
-                        <property name="pack_type">end</property>
                         <property name="position">1</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkComboBoxText" id="source_chooser">
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                      </object>
+                      <packing>
+                        <property name="expand">True</property>
+                        <property name="fill">True</property>
+                        <property name="position">2</property>
                       </packing>
                     </child>
                   </object>
@@ -480,23 +542,29 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkComboBoxText" id="brightness">
+                      <object class="GtkLabel" id="brightness_display">
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                      </object>
+                      <packing>
+                        <property name="expand">True</property>
+                        <property name="fill">True</property>
+                        <property name="position">1</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkComboBoxText" id="brightness_chooser">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="margin_left">10</property>
                         <property name="margin_right">10</property>
                         <property name="margin_top">10</property>
                         <property name="margin_bottom">10</property>
-                        <items>
-                          <item id="Off" translatable="yes">Off</item>
-                          <item id="Level_1" translatable="yes">Level 1</item>
-                          <item id="Level_2" translatable="yes">Level 2</item>
-                        </items>
                       </object>
                       <packing>
                         <property name="expand">True</property>
                         <property name="fill">True</property>
-                        <property name="position">1</property>
+                        <property name="position">2</property>
                       </packing>
                     </child>
                   </object>
