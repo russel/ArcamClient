@@ -78,7 +78,7 @@ struct ZoneState {
 #[derive(Debug)]
 struct AmpState {
     zones: HashMap<ZoneNumber, ZoneState>,
-    brightness: Cell<u8>,  // Values 0, 1, and 2 are the only ones allowed.
+    brightness: Cell<Brightness>,
     source: Cell<Source>,
 }
 
@@ -86,11 +86,11 @@ impl Default for AmpState {
     fn default() -> Self {
         let mut amp_state = Self {
             zones: HashMap::new(),
-            brightness: Cell::new(1), // TODO Values 0, 1, and 2 are the only ones allowed.
+            brightness: Cell::new(Brightness::Level1),
             source: Cell::new(Source::TUNER),
         };
         amp_state.zones.insert(ZoneNumber::One, ZoneState{volume: Cell::new(30), mute: Cell::new(false)});
-        amp_state.zones.insert(ZoneNumber::Two, ZoneState{volume: Cell::new(30), mute: Cell::new(true)});
+        amp_state.zones.insert(ZoneNumber::Two, ZoneState{volume: Cell::new(20), mute: Cell::new(true)});
         amp_state
     }
 }
@@ -102,7 +102,7 @@ fn create_command_response(zone: ZoneNumber, cc: Command, values: &[u8], amp_sta
             if values[0] != REQUEST_VALUE {
                 Err(format!("Incorrect DisplayBrightness request {:?}", values[0]))
             } else {
-                Ok(create_response(zone, cc, AnswerCode::StatusUpdate, &[amp_state.brightness.get()]).unwrap())
+                Ok(create_response(zone, cc, AnswerCode::StatusUpdate, &[amp_state.brightness.get() as u8]).unwrap())
             },
         Command::SetRequestVolume =>
             if values[0] == REQUEST_VALUE {
@@ -132,24 +132,34 @@ fn create_command_response(zone: ZoneNumber, cc: Command, values: &[u8], amp_sta
 
 /// Handle a connection from a remote client.
 fn handle_client(stream: &mut TcpStream, amp_state: &mut AmpState) {
-    println!("####  mock_avr850: got a connection from {}", stream.peer_addr().unwrap());
+    eprintln!("####  mock_avr850: got a connection from {}", stream.peer_addr().unwrap());
     loop {
         let mut buffer = [0; 256];
         match stream.read(&mut buffer) {
             Ok(count) => {
                 if count > 0 {
-                    let data = &buffer[..count];
-                    println!("####  mock_avr850: got a message {:?}", data);
+                    let mut data = &buffer[..count];
+                    eprintln!("####  mock_avr850: got a message {:?}", data);
                     // TODO Assume each is a complete packet and only one packet.
                     //   This may not be a good assumption even for the integration testing.
+                    // Remove the output so as to speed up processing which then gets multiple packets to the client very quickly.
                     if data[0] == PACKET_START {
-                        println!("####  mock_avr850: processing Arcam request {:?}", data);
-                        match parse_request(data) {
-                            Ok((zone, cc, values, count)) => {
-                                stream.write(&create_command_response(zone, cc, &values, amp_state).unwrap())
-                                    .expect("####  mock_avr850: failed to write response");
-                            },
-                            Err(e) => println!("####  mock_avr850: failed to parse an apparent Arcam request: {:?}, {:?}", data, e),
+                        eprintln!("####  mock_avr850: processing Arcam request {:?}", data);
+                        // TODO  How to deal with a buffer that has multiple packets?
+                        loop {
+                            match parse_request(data) {
+                                Ok((zone, cc, values, count)) => {
+                                    data = &data[count..];
+                                    eprintln!("####  mock_avr850: got a parse of ({:?}, {:?}, {:?}), data left {:?}", zone, cc, values, &data);
+                                    eprintln!("####  mock_avr850: sending back {:?}", &create_command_response(zone, cc, &values, amp_state).unwrap());
+                                    stream.write(&create_command_response(zone, cc, &values, amp_state).unwrap())
+                                        .expect("####  mock_avr850: failed to write response");
+                                },
+                                Err(e) => {
+                                    eprintln!("####  mock_avr850: failed to parse an apparent Arcam request: {:?}, {:?}", data, e);
+                                    break;
+                                },
+                            }
                         }
                     } else {
                         match from_utf8(data) {
@@ -223,19 +233,19 @@ mod tests {
     use super::{AmpState, create_command_response};
 
     use arcamclient::arcam_protocol::{
-        AnswerCode, Command, ZoneNumber,
+        AnswerCode, Brightness, Command, ZoneNumber,
         REQUEST_VALUE,
-        create_response,
+        create_response
     };
 
     #[test]
     fn get_display_brightness() {
         let mut amp_state: AmpState = Default::default();
-        assert_eq!(amp_state.brightness.get(), 1);
+        assert_eq!(amp_state.brightness.get(), Brightness::Level1);
         assert_eq!(
             create_command_response(ZoneNumber::One, Command::DisplayBrightness, &mut [REQUEST_VALUE], &mut amp_state).unwrap(),
             create_response(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, &[0x01]).unwrap());
-        assert_eq!(amp_state.brightness.get(), 1);
+        assert_eq!(amp_state.brightness.get(), Brightness::Level1);
     }
 
     #[test]
