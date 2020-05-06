@@ -59,7 +59,7 @@ pub struct ControlWindow {
 }
 
 impl ControlWindow {
-    pub fn new(application: &gtk::Application) -> Rc<Self> {
+    pub fn new(application: &gtk::Application, port_number: Option<u16>) -> Rc<Self> {
         let builder = gtk::Builder::new_from_string(include_str!("resources/arcamclient.glade"));
         let window: gtk::ApplicationWindow = builder.get_object("applicationWindow").unwrap();
         window.set_application(Some(application));
@@ -155,17 +155,21 @@ impl ControlWindow {
                                 button.set_active(false);
                             } else {
                                 let address = address;
-                                eprintln!("control_window::connect_toggled: connect to {}:50000", &address);
+                                let p_n = match port_number {
+                                    Some(p) => p,
+                                    None => 50000
+                                };
+                                eprintln!("control_window::connect_toggled: connect to {}:{}", &address, p_n);
                                 match functionality::connect_to_amp(
                                     &tx_from_comms_manager,
                                     &address.to_string(),
-                                    50000,
+                                    p_n,
                                 ) {
                                     Ok(s) => {
                                         //  TODO How come a mutable borrow works here?
                                         //  TODO Why is the argument to replace here not an Option?
                                         c_w.to_comms_manager.borrow_mut().replace(s);
-                                        eprintln!("control_window::connect_toggled: connected to amp at {}:50000", address);
+                                        eprintln!("control_window::connect_toggled: connected to amp at {}:{}", address, p_n);
                                     },
                                     Err(e) => eprintln!("control_window::connect_toggled: failed to connect to amp – {:?}", e),
                                 };

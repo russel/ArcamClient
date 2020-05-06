@@ -41,7 +41,7 @@ use arcamclient::functionality;
 fn ui_test() {
     let application = gtk::Application::new(Some("uk.org.winder.arcamclient.ui_test"), gio::ApplicationFlags::empty()).unwrap();
     application.connect_startup(move |app| {
-        let control_window = control_window::ControlWindow::new(&app);
+        let control_window = control_window::ControlWindow::new(&app, None);
         // Attempt a connection to somewhere guaranteed to fail. Use 127.0.0.2 because
         // it is not 127.0.0.1 and yet is a loopback address. This ensures the UI state
         // initialisation required with no attempt to use a mock AVR850.
