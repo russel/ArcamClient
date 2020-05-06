@@ -3,9 +3,9 @@
 A gtk-rs based Rust application to control an Arcam AVR amplifier or AV receiver over an Ethernet
 connection.
 
-Travis-CI: [![Travis-CI build status](https://travis-ci.org/russel/ArcamClient.svg?branch=master)](https://travis-ci.org/russel/ArcamClient)
-
 GitLab: [![GitLab build status](https://gitlab.com/Russel/arcam-client/badges/master/pipeline.svg)](https://gitlab.com/Russel/arcam-client)
+&nbsp;&nbsp;&nbsp;&nbsp;
+ Travis-CI: [![Travis-CI build status](https://travis-ci.org/russel/ArcamClient.svg?branch=master)](https://travis-ci.org/russel/ArcamClient)
 
 [![Licence](https://img.shields.io/badge/license-GPL_3-green.svg)](https://www.gnu.org/licenses/gpl-3.0.txt)
 
