@@ -24,3 +24,4 @@ pub mod arcam_protocol;
 pub mod comms_manager;
 pub mod control_window;
 pub mod functionality;
+pub mod socket_support;

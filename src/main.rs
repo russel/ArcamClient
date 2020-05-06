@@ -27,6 +27,7 @@ mod arcam_protocol;
 mod comms_manager;
 mod control_window;
 mod functionality;
+mod socket_support;
 
 #[cfg(not(test))]
 fn main() {

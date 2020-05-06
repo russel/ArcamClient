@@ -35,7 +35,6 @@ use num_traits::FromPrimitive;
 
 use crate::about;
 use crate::functionality;
-use crate::arcam_protocol;
 use crate::arcam_protocol::{Brightness, Source, ZoneNumber};
 
 pub struct ControlWindow {
