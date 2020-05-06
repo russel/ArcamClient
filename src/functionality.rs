@@ -119,70 +119,73 @@ pub fn initialise_control_window(control_window: &Rc<ControlWindow>) {
     get_mute_from_amp(control_window, ZoneNumber::Two);
 }
 
-fn handle_response(control_window: &Rc<ControlWindow>, datum: ResponseTuple) {
-    let (zone, cc, ac, value) = datum;
+fn handle_response(control_window: &Rc<ControlWindow>, zone: ZoneNumber, cc: Command, ac: AnswerCode, datum: &Vec<u8>) {
+    eprintln!("functionality::handle_response: dealing with response ({:?}, {:?}, {:?}, {:?})", zone, cc, ac, &datum);
     // TODO Deal with non-StatusUpdate packets.
     assert_eq!(ac, AnswerCode::StatusUpdate);
     match cc {
         Command::DisplayBrightness => {
-            assert_eq!(value.len(), 1);
-            control_window.set_brightness_display(value[0])
+            assert_eq!(datum.len(), 1);
+            control_window.set_brightness_display(datum[0])
         },
         Command::SetRequestVolume => {
-            assert_eq!(value.len(), 1);
-            control_window.set_volume_display(zone, value[0] as f64);
+            assert_eq!(datum.len(), 1);
+            control_window.set_volume_display(zone, datum[0] as f64);
         },
         Command::RequestMuteStatus => {
-            assert_eq!(value.len(), 1);
-            control_window.set_mute_display(zone, value[0] != 0);
+            assert_eq!(datum.len(), 1);
+            control_window.set_mute_display(zone, datum[0] == 0);
         },
         Command::RequestDABStation => {
-            assert_eq!(value.len(), 16);
-            let message = match String::from_utf8(value.to_vec()) {
+            assert_eq!(datum.len(), 16);
+            let message = match String::from_utf8(datum.to_vec()) {
                 Ok(s) => s.trim().to_string(),
-                Err(e) => { eprintln!("functionality::process_response: failed to process {:?} – {:?}", value, e); "".to_string()},
+                Err(e) => { eprintln!("functionality::handle_response: failed to process {:?} – {:?}", &datum, e); "".to_string()},
             };
-            eprintln!("functionality::process_response: got the station name: {}", message);
+            eprintln!("functionality::handle_response: got the station name: {}", message);
         }
         Command::ProgrammeTypeCategory => {
-            assert_eq!(value.len(), 16);
-            let message = match String::from_utf8(value.to_vec()) {
+            assert_eq!(datum.len(), 16);
+            let message = match String::from_utf8(datum.to_vec()) {
                 Ok(s) => s.trim().to_string(),
-                Err(e) => { eprintln!("functionality::process_response: failed to process {:?} – {:?}", value, e); "".to_string()},
+                Err(e) => { eprintln!("functionality::handle_response: failed to process {:?} – {:?}", &datum, e); "".to_string()},
             };
-            eprintln!("functionality::process_response: got the station type: {}", message);
+            eprintln!("functionality::handle_response: got the station type: {}", message);
         }
         Command::RequestRDSDLSInformation => {
-            assert_eq!(value.len(), 129);
-            let index_of_nul = match value.iter().position(|x| *x == 0u8) {
+            assert_eq!(datum.len(), 129);
+            let index_of_nul = match datum.iter().position(|x| *x == 0u8) {
                 Some(i) => i,
-                None => { eprintln!("Failed to find a nul character in the array."); 129 },
+                None => { eprintln!("functionality::handle_response: failed to find a nul character in the array."); 129 },
             };
-            let message = match String::from_utf8(value[1..index_of_nul].to_vec()) {
+            let message = match String::from_utf8(datum[1..index_of_nul].to_vec()) {
                 Ok(s) => s.trim().to_string(),
-                Err(e) => { eprintln!("functionality::process_response: failed to get a string – {}", e); "".to_string() },
+                Err(e) => { eprintln!("functionality::handle_response: failed to get a string – {}", e); "".to_string() },
             };
-            eprintln!("functionality::process_response: got the RDS DLS: {}", message);
+            eprintln!("functionality::handle_response: got the RDS DLS: {}", message);
         }
-        _ => {},
+        x => eprintln!("functionality::handle_response: failed to deal with command {:?}", x),
     };
 }
 
 
-pub fn try_parse_of_response_data(control_window: &Rc<ControlWindow>, queue: &mut Vec<u8>) {
+pub fn try_parse_of_response_data(control_window: &Rc<ControlWindow>, queue: &mut Vec<u8>) -> bool {
     eprintln!("functionality::try_parse_of_response_data: starting parse on queue: {:?}", &queue);
     match parse_response(&queue) {
         Ok((zone, cc, ac, data, count)) => {
-            eprintln!("functionality::try_parse_of_response_data: got a successful parse of a packet.");
-            for _ in 0..count { queue.pop(); }
-            handle_response(control_window, (zone, cc, ac, data))
+            eprintln!("functionality::try_parse_of_response_data: got a successful parse of a packet. {:?}", (zone, cc, ac, &data));
+            for _ in 0..count { queue.remove(0); }
+            eprintln!("functionality::try_parse_of_response_data: updated buffer {:?}", queue);
+            handle_response(control_window, zone, cc, ac, &data);
+            true
         },
         Err(e) => {
-            eprintln!("comms_manager::listen_to_reader: failed to parse a packet.");
+            eprintln!("functionality::try_parse_of_response_data: failed to parse a packet from {:?}.", queue);
             match e {
                 "Insufficient bytes to form a packet." => {},
                 _ => panic!("XXXXX {}", e),
-            }
+            };
+            false
         },
     }
 }

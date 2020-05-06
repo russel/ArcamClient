@@ -17,6 +17,7 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use std::borrow::BorrowMut; // Is this actually used?
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -29,10 +30,13 @@ use gtk::prelude::*;
 
 //use futures;
 
+use num_derive::FromPrimitive;  // Apparently unused, but it is necessary.
+use num_traits::FromPrimitive;
+
 use crate::about;
 use crate::functionality;
-use crate::arcam_protocol::{Source, ZoneNumber};
-use std::borrow::BorrowMut;
+use crate::arcam_protocol;
+use crate::arcam_protocol::{Brightness, Source, ZoneNumber};
 
 pub struct ControlWindow {
     window: gtk::ApplicationWindow,
@@ -125,7 +129,9 @@ impl ControlWindow {
                 for c in datum.iter() {
                     queue.push(*c);
                 }
-                functionality::try_parse_of_response_data(&c_w, &mut queue);
+                while functionality::try_parse_of_response_data(&c_w, &mut queue) {
+                    eprintln!("control_window::rx_from_comms_manager listener: got a good packet.");
+                }
                 Continue(true)
             }
         });
@@ -267,6 +273,42 @@ impl ControlWindow {
     pub fn get_connect(self: &Self) -> gtk::CheckButton { self.connect_chooser.clone() }
 
     pub fn get_to_comms_manager(self: &Self) -> &RefCell<Option<futures::channel::mpsc::Sender<Vec<u8>>>> { &self.to_comms_manager }
+
+    pub fn get_brightness_display(self: &Self) -> Brightness {
+        match self.brightness_display.get_text().unwrap().as_str() {
+            "Off" => Brightness::Off,
+            "Level_1" => Brightness::Level1,
+            "Level_2" => Brightness::Level2,
+            x => panic!("Illegal brightness value from display – {}", x),
+        }
+    }
+
+    pub fn get_volume_display(self: &Self, zone: ZoneNumber) -> u8 {
+        match match zone {
+            ZoneNumber::One => self.zone_1_volume_display.get_text(),
+            ZoneNumber::Two => self.zone_2_volume_display.get_text(),
+        } {
+            Some(s) => match s.parse::<u8>() {
+                Ok(v) => v,
+                Err(e) => 0u8,
+            },
+            None => 0u8,
+        }
+    }
+
+    pub fn get_mute_display(self: &Self, zone: ZoneNumber) -> bool {
+        match match zone {
+            ZoneNumber::One => self.zone_1_mute_display.get_text(),
+            ZoneNumber::Two => self.zone_2_mute_display.get_text(),
+        } {
+            Some(s) => match s.as_str() {
+                "Muted" => false,
+                "On" => true,
+                x => panic!("Illegal value for muted – {}", x),
+            },
+            None => true,
+        }
+    }
 
     //  Some methods needed for the integration tests.
 

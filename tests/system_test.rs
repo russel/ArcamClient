@@ -17,7 +17,8 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-// Do not need to start a mock AVR850 for this test.
+// Need to start a mock AVR850.
+mod start_avr850;
 
 use std::rc::Rc;
 
@@ -29,46 +30,36 @@ use gtk::prelude::*;
 use futures;
 use futures::StreamExt;
 
-use arcamclient::arcam_protocol::{
-    AnswerCode, Command, ZoneNumber,
-    create_request,
-};
+use arcamclient::arcam_protocol::{AnswerCode, Command, ZoneNumber, create_request, Brightness};
 use arcamclient::comms_manager;
 use arcamclient::control_window;
 use arcamclient::functionality;
 
+async fn terminate_application(control_window: Rc<control_window::ControlWindow>) {
+    control_window.get_application().unwrap().quit();
+}
+
+use start_avr850::PORT_NUMBER;
+
 #[test]
-fn ui_test() {
+fn system_test_with_mock_amp() {
     let application = gtk::Application::new(Some("uk.org.winder.arcamclient.ui_test"), gio::ApplicationFlags::empty()).unwrap();
     application.connect_startup(move |app| {
         let control_window = control_window::ControlWindow::new(&app);
-        // Attempt a connection to somewhere guaranteed to fail. Use 127.0.0.2 because
-        // it is not 127.0.0.1 and yet is a loopback address. This ensures the UI state
-        // initialisation required with no attempt to use a mock AVR850.
-        control_window.set_address("127.0.0.2");
+
+        control_window.set_address("127.0.0.1");
         control_window.get_connect().set_active(true);
-        // Amend the state of the UI. Replace the channel to the comms manager with one
-        // that we can use for checking the packets sent. This cuts off the comms manager
-        // so that it's state no longer matters for the tests.
-        let (tx_queue, mut rx_queue) = futures::channel::mpsc::channel::<Vec<u8>>(10);
-        let old_queue = control_window.get_to_comms_manager().borrow_mut().replace(tx_queue);
-        // Set some tests going.
-        glib::MainContext::default().spawn_local({
+
+        glib::source::timeout_add_seconds_local(1, {
             let c_w = control_window.clone();
-            async move {
+            move ||{
 
-                eprintln!("ui_test::ui_test: set Zone 1 volume");
-                // This should trigger a change to an volume ScrollButton and therefore
-                // send a message to the amp.
-                control_window.set_volume_chooser(ZoneNumber::One, 20.0);
+                assert_eq!(c_w.get_brightness_display(), Brightness::Level1);
+                assert_eq!(c_w.get_volume_display(ZoneNumber::One), 30);
+                assert!(c_w.get_mute_display(ZoneNumber::One));
+                assert_eq!(c_w.get_volume_display(ZoneNumber::Two), 20);
+                assert!(!c_w.get_mute_display(ZoneNumber::Two));
 
-                eprintln!("ui_test::ui_test: await packet on queue of packet to comms_manager.");
-                match rx_queue.next().await {
-                    Some(s) => assert_eq!(s, create_request(ZoneNumber::One, Command::SetRequestVolume, &[0x14]).unwrap()),
-                    None => assert!(false, "Failed to get a value from the response queue."),
-                };
-
-                eprintln!("ui_test::ui_test: set up application termination.");
                 glib::source::timeout_add_seconds_local(1, {
                     let cw = c_w.clone();
                     move || {
@@ -76,6 +67,8 @@ fn ui_test() {
                         Continue(false)
                     }
                 });
+
+                Continue(false)
             }
         });
     });
