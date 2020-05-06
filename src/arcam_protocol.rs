@@ -224,7 +224,6 @@ pub fn parse_request(packet: &[u8]) -> Result<(ZoneNumber, Command, Vec<u8>, usi
     index += 1;
     if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
     let end_index = index + dl;
-    assert_eq!(end_index, packet_length - 1);
     if end_index >= packet_length { return Err("Insufficient bytes to form a packet."); }
     let data = &packet[index..end_index];
     assert_eq!(data.len(), dl);
@@ -268,7 +267,6 @@ pub fn parse_response(packet: &[u8]) -> Result<(ZoneNumber, Command, AnswerCode,
     index += 1;
     if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
     let end_index = index + dl;
-    assert_eq!(end_index, packet_length - 1);
     if end_index >= packet_length { return Err("Insufficient bytes to form a packet."); }
     let data = &packet[index..end_index];
     assert_eq!(data.len(), dl);
@@ -327,6 +325,15 @@ mod tests {
     fn parse_valid_set_volume_request() {
         let mut request = create_request(ZoneNumber::One, Command::SetRequestVolume, &mut [20]).unwrap();
         assert_eq!(parse_request(&mut request).unwrap(), (ZoneNumber::One, Command::SetRequestVolume, vec![0x14], 6));
+    }
+
+    #[test]
+    fn parse_buffer_with_multiple_request_packets() {
+        let input = [33, 1, 29, 1, 240, 13, 33, 1, 1, 1, 240, 13, 33, 1, 13, 1, 30, 13];
+        assert_eq!(
+            parse_request(&input).unwrap(),
+            (ZoneNumber::One, Command::RequestCurrentSource, vec![240u8], 6)
+        );
     }
 
     #[test]
@@ -438,6 +445,15 @@ mod tests {
                   32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
                   32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,]
              , 135)
+        );
+    }
+
+    #[test]
+    fn parse_buffer_with_multiple_response_packets() {
+        let input = [33, 1, 29, 0, 1, 11, 13, 33, 1, 1, 0, 1, 1, 13, 33, 1, 13, 0, 1, 30, 13];
+        assert_eq!(
+            parse_response(&input).unwrap(),
+            (ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![11u8], 7)
         );
     }
 
