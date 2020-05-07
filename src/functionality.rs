@@ -26,6 +26,8 @@ use std::rc::Rc;
 use gtk;
 use gtk::prelude::*;
 
+use futures::channel::mpsc::Sender;
+
 use num_derive::FromPrimitive;  // Apparently unused, but it is necessary.
 use num_traits::FromPrimitive;
 
@@ -55,71 +57,48 @@ pub fn connect_to_amp(
 pub fn disconnect_from_amp() {
 }
 
-fn check_status_and_send_request(control_window: &Rc<ControlWindow>, request: &[u8]) {
-    eprintln!("functionality::check_status_and_send_request: send message to amp {:?}", request);
-    if control_window.get_connect_chooser_value() {
-        //  TODO How come mutable borrow works here?
-        //  TODO Why is the argument to replace here not an Option?
-        // Cannot use the content of control_window.to_comms_manager as mutable so get
-        // it out first. Need a dummy Sender because there seems to be implicit
-        // unwrapping of the Option in the replace function, so None cannot be used.
-        // This is clearly wrong, we should be able to replace with None.
-        let (rx, tx) = futures::channel::mpsc::channel(10);
-        let mut to_comms_manager = control_window.get_to_comms_manager().borrow_mut().replace(rx).unwrap();
-        eprintln!("functionality::check_status_and_send_request: sending {:?}", &request);
-        match to_comms_manager.try_send(request.to_vec()) {
-            Ok(_) => {},
-            Err(e) => eprintln!("functionality::check_status_and_send_request: failed to send packet – {:?}", e),
-        }
-        control_window.get_to_comms_manager().borrow_mut().replace(to_comms_manager);
-    } else {
-        eprintln!("functionality::check_status_and_send_request: not connected to an amp,");
-        let dialogue = gtk::MessageDialog::new(
-            Some(&control_window.get_window()),
-            gtk::DialogFlags::MODAL,
-            gtk::MessageType::Info,
-            gtk::ButtonsType::Ok,
-            "Not connected to an amplifier."
-        );
-        dialogue.run();
-        dialogue.destroy();
+pub fn send_request(sender: &mut Sender<Vec<u8>>, request: &[u8]) {
+    eprintln!("functionality::send_request: send message to amp {:?}", request);
+    match sender.try_send(request.to_vec()) {
+        Ok(_) => {},
+        Err(e) => eprintln!("functionality::send_request: failed to send packet – {:?}", e),
     }
 }
 
-pub fn get_source_from_amp(control_window: &Rc<ControlWindow>) {
-    check_status_and_send_request(control_window, &create_request(ZoneNumber::One, Command::RequestCurrentSource, &[REQUEST_VALUE]).unwrap());
+pub fn get_source_from_amp(sender: &mut Sender<Vec<u8>>) {
+    send_request(sender, &create_request(ZoneNumber::One, Command::RequestCurrentSource, &[REQUEST_VALUE]).unwrap());
 }
 
 
-pub fn get_brightness_from_amp(control_window: &Rc<ControlWindow>) {
-    check_status_and_send_request(control_window, &create_request(ZoneNumber::One, Command::DisplayBrightness, &[REQUEST_VALUE]).unwrap());
+pub fn get_brightness_from_amp(sender: &mut Sender<Vec<u8>>) {
+    send_request(sender, &create_request(ZoneNumber::One, Command::DisplayBrightness, &[REQUEST_VALUE]).unwrap());
 }
 
-pub fn get_mute_from_amp(control_window: &Rc<ControlWindow>, zone: ZoneNumber) {
-    check_status_and_send_request(control_window, &create_request(zone, Command::RequestMuteStatus, &[REQUEST_VALUE]).unwrap());
+pub fn get_mute_from_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber) {
+    send_request(sender, &create_request(zone, Command::RequestMuteStatus, &[REQUEST_VALUE]).unwrap());
 }
 
-pub fn set_mute_on_amp(control_window: &Rc<ControlWindow>, zone: ZoneNumber, off: bool) {
+pub fn set_mute_on_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber, off: bool) {
     eprintln!("set zone 1 mute state to {}", off);
 }
 
-pub fn get_volume_from_amp(control_window: &Rc<ControlWindow>, zone: ZoneNumber) {
-    check_status_and_send_request(control_window, &create_request(zone, Command::SetRequestVolume, &[REQUEST_VALUE]).unwrap());
+pub fn get_volume_from_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber) {
+    send_request(sender, &create_request(zone, Command::SetRequestVolume, &[REQUEST_VALUE]).unwrap());
 }
 
-pub fn set_volume_on_amp(control_window: &Rc<ControlWindow>, zone:ZoneNumber, value: f64) {
+pub fn set_volume_on_amp(sender: &mut Sender<Vec<u8>>, zone:ZoneNumber, value: f64) {
     let volume = value as u8;
     assert!(volume < 100);
-    check_status_and_send_request(control_window, &create_request(zone, Command::SetRequestVolume, &[volume]).unwrap());
+    send_request(sender, &create_request(zone, Command::SetRequestVolume, &[volume]).unwrap());
 }
 
-pub fn initialise_control_window(control_window: &Rc<ControlWindow>) {
-    get_source_from_amp(control_window);
-    get_brightness_from_amp(control_window);
-    get_volume_from_amp(control_window, ZoneNumber::One);
-    get_mute_from_amp(control_window, ZoneNumber::One);
-    get_volume_from_amp(control_window, ZoneNumber::Two);
-    get_mute_from_amp(control_window, ZoneNumber::Two);
+pub fn initialise_control_window(sender: &mut Sender<Vec<u8>>) {
+    get_source_from_amp(sender);
+    get_brightness_from_amp(sender);
+    get_volume_from_amp(sender, ZoneNumber::One);
+    get_mute_from_amp(sender, ZoneNumber::One);
+    get_volume_from_amp(sender, ZoneNumber::Two);
+    get_mute_from_amp(sender, ZoneNumber::Two);
 }
 
 fn handle_response(control_window: &Rc<ControlWindow>, zone: ZoneNumber, cc: Command, ac: AnswerCode, datum: &Vec<u8>) {

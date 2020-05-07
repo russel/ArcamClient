@@ -47,6 +47,7 @@ fn system_test_with_mock_amp() {
         control_window.get_connect_chooser().set_active(true);
 
         glib::source::timeout_add_seconds_local(1, {
+            let a = app.clone();
             let c_w = control_window.clone();
             move ||{
 
@@ -58,9 +59,9 @@ fn system_test_with_mock_amp() {
                 assert!(!c_w.get_mute_display_value(ZoneNumber::Two));
 
                 glib::source::timeout_add_seconds_local(1, {
-                    let cw = c_w.clone();
+                    let aa = a.clone();
                     move || {
-                        cw.get_application().unwrap().quit();
+                        aa.quit();
                         Continue(false)
                     }
                 });

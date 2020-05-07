@@ -186,7 +186,7 @@ impl ControlWindow {
                                     },
                                     Err(e) => eprintln!("control_window::connect_toggled: failed to connect to amp – {:?}", e),
                                 };
-                                functionality::initialise_control_window(&c_w);
+                                functionality::initialise_control_window(&mut c_w.get_to_comms_manager());
                             }
                         }
                         None => {
@@ -211,28 +211,40 @@ impl ControlWindow {
         control_window.zone_1_volume_chooser.connect_changed({
             let c_w = control_window.clone();
             move |button| {
-                functionality::set_volume_on_amp(&c_w, ZoneNumber::One, button.get_value());
+                if c_w.is_connected() {
+                    functionality::set_volume_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::One, button.get_value());
+                }
             }
         });
         control_window.zone_1_mute_chooser.connect_toggled({
             let c_w = control_window.clone();
             move |button| {
-                functionality::set_mute_on_amp(&c_w, ZoneNumber::One, button.get_active())
+                if c_w.is_connected() {
+                    functionality::set_mute_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::One, button.get_active())
+                }
             }
         });
         control_window.zone_2_volume_chooser.connect_changed({
             let c_w = control_window.clone();
             move |button| {
-                functionality::set_volume_on_amp(&c_w, ZoneNumber::Two, button.get_value());
+                if c_w.is_connected() {
+                    functionality::set_volume_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::Two, button.get_value());
+                }
             }
         });
         control_window.zone_2_mute_chooser.connect_toggled({
             let c_w = control_window.clone();
             move |button| {
-                functionality::set_mute_on_amp(&c_w, ZoneNumber::Two, button.get_active())
+                if c_w.is_connected() {
+                    functionality::set_mute_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::Two, button.get_active())
+                }
             }
         });
         control_window
+    }
+
+    fn get_to_comms_manager(self: &Self) -> futures::channel::mpsc::Sender<Vec<u8>> {
+        self.to_comms_manager.borrow().as_ref().unwrap().clone()
     }
 
     pub fn set_connect_display(self: &Self, on: bool) {
@@ -308,12 +320,6 @@ impl ControlWindow {
         self.radio_data.show();
     }
 
-    pub fn get_application(self: &Self) -> Option<gtk::Application> { self.window.get_application() }
-
-    pub fn get_window(self: &Self) -> gtk::ApplicationWindow { self.window.clone() }
-
-    pub fn get_to_comms_manager(self: &Self) -> &RefCell<Option<futures::channel::mpsc::Sender<Vec<u8>>>> { &self.to_comms_manager }
-
     pub fn get_connect_display_value(self: &Self) -> bool {
         match self.connect_display.get_text().unwrap().as_str() {
             "Connected" => true,
@@ -323,7 +329,7 @@ impl ControlWindow {
     }
 
     pub fn get_connect_chooser_value(self: &Self) -> bool {
-        self.connect_chooser.get_active()
+        self.connect_chooser.get_active() as bool
     }
 
     pub fn get_brightness_display_value(self: &Self) -> Brightness {
@@ -362,37 +368,37 @@ impl ControlWindow {
         }
     }
 
-    //  Some methods needed for the integration tests.
-
-    pub fn get_connect_chooser(self: &Self) -> gtk::CheckButton { self.connect_chooser.clone() }
-
-    pub fn set_address(self: &Self, address: &str) { self.address.set_text(address); }
-
-    pub fn create_dummy_control_window_for_testing(application: &gtk::Application) -> Self {
-        let zone_1_adjustment = gtk::Adjustment::new(0.0, 0.0, 100.0, 1.0, 10.0, 10.0);
-        let zone_2_adjustment = gtk::Adjustment::new(0.0, 0.0, 100.0, 1.0, 10.0, 10.0);
-        ControlWindow {
-            window: gtk::ApplicationWindow::new(application),
-            address: gtk::Entry::new(),
-            connect_display: gtk::Label::new(None),
-            connect_chooser: gtk::CheckButton::new(),
-            source_display: gtk::Label::new(None),
-            source_chooser: gtk::ComboBoxText::new(),
-            brightness_display: gtk::Label::new(None),
-            brightness_chooser: gtk::ComboBoxText::new(),
-            zone_1_volume_display: gtk::Label::new(None),
-            zone_1_volume_chooser: gtk::SpinButton::new(Some(&zone_1_adjustment), 1.0, 3),
-            zone_1_mute_display: gtk::Label::new(None),
-            zone_1_mute_chooser: gtk::CheckButton::new(),
-            zone_2_volume_display: gtk::Label::new(None),
-            zone_2_volume_chooser: gtk::SpinButton::new(Some(&zone_2_adjustment), 1.0, 3),
-            zone_2_mute_display: gtk::Label::new(None),
-            zone_2_mute_chooser: gtk::CheckButton::new(),
-            radio_data: gtk::Box::new(gtk::Orientation::Horizontal, 10),
-            radio_station_display: gtk::Label::new(None),
-            music_type_display: gtk::Label::new(None),
-            rds_dls: gtk::Label::new(None),
-            to_comms_manager: RefCell::new(None)
+    fn is_connected(self: &Self) -> bool {
+        if self.get_connect_display_value() {
+            true
+        } else {
+            if ! cfg!(test) {
+                let dialogue = gtk::MessageDialog::new(
+                    Some(&self.window),
+                    gtk::DialogFlags::MODAL,
+                    gtk::MessageType::Info,
+                    gtk::ButtonsType::Ok,
+                    "Not connected to an amplifier."
+                );
+                dialogue.run();
+                dialogue.destroy();
+            }
+            false
         }
     }
+
+    //  Some methods needed for the integration tests.
+
+    //  ui_test has to connect to a mock amp but without a mock amp.
+    pub fn get_connect_display(self: &Self) -> gtk::Label { self.connect_display.clone() }
+
+    //  system_test and ui_test have to connect to a mock amp.
+    pub fn get_connect_chooser(self: &Self) -> gtk::CheckButton { self.connect_chooser.clone() }
+
+    //  system_test and ui_test have to set the address.
+    pub fn set_address(self: &Self, address: &str) { self.address.set_text(address); }
+
+    //  ui_test has to hack the state.
+    pub fn get_to_comms_manager_field(self: &Self) -> &RefCell<Option<futures::channel::mpsc::Sender<Vec<u8>>>> { &self.to_comms_manager }
+
 }

@@ -46,21 +46,23 @@ fn ui_test() {
         // it is not 127.0.0.1 and yet is a loopback address. This ensures the UI state
         // initialisation required with no attempt to use a mock AVR850.
         control_window.set_address("127.0.0.2");
-        control_window.get_connect_chooser().set_active(true);
+        control_window.get_connect_chooser().set_active(true); // Won't se the state, so…
+        control_window.get_connect_display().set_text("Connected"); // …set it manually.
         // Amend the state of the UI. Replace the channel to the comms manager with one
         // that we can use for checking the packets sent. This cuts off the comms manager
         // so that it's state no longer matters for the tests.
         let (tx_queue, mut rx_queue) = futures::channel::mpsc::channel::<Vec<u8>>(10);
-        let old_queue = control_window.get_to_comms_manager().borrow_mut().replace(tx_queue);
+        control_window.get_to_comms_manager_field().borrow_mut().replace(tx_queue);
         // Set some tests going.
         glib::MainContext::default().spawn_local({
+            let a = app.clone();
             let c_w = control_window.clone();
             async move {
 
                 eprintln!("ui_test::ui_test: set Zone 1 volume");
                 // This should trigger a change to an volume ScrollButton and therefore
                 // send a message to the amp.
-                control_window.set_volume_chooser(ZoneNumber::One, 20.0);
+                c_w.set_volume_chooser(ZoneNumber::One, 20.0);
 
                 eprintln!("ui_test::ui_test: await packet on queue of packet to comms_manager.");
                 match rx_queue.next().await {
@@ -70,9 +72,9 @@ fn ui_test() {
 
                 eprintln!("ui_test::ui_test: set up application termination.");
                 glib::source::timeout_add_seconds_local(1, {
-                    let cw = c_w.clone();
+                    let aa = a.clone();
                     move || {
-                        cw.get_application().unwrap().quit();
+                        aa.quit();
                         Continue(false)
                     }
                 });
