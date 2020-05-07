@@ -51,7 +51,7 @@ fn system_test_with_mock_amp() {
             let c_w = control_window.clone();
             move ||{
 
-                //assert!(c_w.get_connect_display_value());
+                assert!(c_w.get_connect_display_value());
                 assert_eq!(c_w.get_brightness_display_value(), Brightness::Level1);
                 assert_eq!(c_w.get_volume_display_value(ZoneNumber::One), 30);
                 assert!(c_w.get_mute_display_value(ZoneNumber::One));

@@ -151,13 +151,12 @@ fn handle_response(control_window: &Rc<ControlWindow>, zone: ZoneNumber, cc: Com
         }
         Command::RequestCurrentSource => {
             assert_eq!(datum.len(), 1);
-            control_window.set_source_display(FromPrimitive::from_u8(datum[0]).unwrap());
+            control_window.set_source_display(zone, FromPrimitive::from_u8(datum[0]).unwrap());
         },
         x => eprintln!("functionality::handle_response: failed to deal with command {:?}", x),
     };
     control_window.set_connect_display(true);
 }
-
 
 pub fn try_parse_of_response_data(control_window: &Rc<ControlWindow>, queue: &mut Vec<u8>) -> bool {
     eprintln!("functionality::try_parse_of_response_data: starting parse on queue: {:?}", &queue);

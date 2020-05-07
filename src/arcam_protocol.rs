@@ -141,6 +141,9 @@ pub enum Source {
     USB = 0x0F,
     STB = 0x10,
     GAME = 0x11,
+
+    // Zone 2 can follow Zone 1. Add this value to deal with this.
+    FollowZone1 = 0xff,
 }
 
 /// The value used as the start of packet value.

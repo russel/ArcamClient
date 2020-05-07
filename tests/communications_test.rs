@@ -51,7 +51,7 @@ fn communications_test() {
     //  Start up an application, no need for a UI.
     let application = gtk::Application::new(Some("uk.org.winder.arcamclient.communications_test"), gio::ApplicationFlags::empty()).unwrap();
     application.connect_startup(move |app| {
-        // Set up the mock AVR850 process.
+        // Set up connection to the mock AVR850 process.
         eprintln!("communications_test::communications_test: making connection to {}", unsafe { PORT_NUMBER });
         let (mut tx_queue, mut rx_queue) = futures::channel::mpsc::channel(10);
         let (tx_from_comms_manager, rx_from_comms_manager) = glib::MainContext::channel(glib::source::PRIORITY_DEFAULT);
@@ -71,6 +71,10 @@ fn communications_test() {
             Err(e) => panic!("~~~~ communications_test: failed to connect to the mock amp."),
         };
         // Run the tests.
+        //
+        // Currently there is an assumption of synchronous request/response. A real
+        // AVR 850 does not provide such a  guarantee, the question is whether the
+        // mock AVR850 does.
         glib::MainContext::default().spawn_local({
             let a = app.clone();
             async move {

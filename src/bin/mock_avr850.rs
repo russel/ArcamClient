@@ -78,8 +78,10 @@ use arcamclient::socket_support::{SocketClient, SocketConnection, SocketListener
 /// Zone state for an AVR. An AVR comprises a number of zones.
 #[derive(Debug)]
 struct ZoneState {
+    power: Cell<bool>, // Zone 1 is always on but Zone 2 can be on or off.
     volume: Cell<u8>,
     mute: Cell<bool>,
+    source: Cell<Source>,
 }
 
 /// The state of a mock AVR.
@@ -87,7 +89,6 @@ struct ZoneState {
 struct AmpState {
     zones: HashMap<ZoneNumber, ZoneState>,
     brightness: Cell<Brightness>,
-    source: Cell<Source>,
 }
 
 impl Default for AmpState {
@@ -95,10 +96,23 @@ impl Default for AmpState {
         let mut amp_state = Self {
             zones: HashMap::new(),
             brightness: Cell::new(Brightness::Level1),
-            source: Cell::new(Source::TUNER),
         };
-        amp_state.zones.insert(ZoneNumber::One, ZoneState{volume: Cell::new(30), mute: Cell::new(false)});
-        amp_state.zones.insert(ZoneNumber::Two, ZoneState{volume: Cell::new(20), mute: Cell::new(true)});
+        amp_state.zones.insert(
+            ZoneNumber::One,
+            ZoneState{
+                power: Cell::new(true),
+                volume: Cell::new(30),
+                mute: Cell::new(false),
+                source: Cell::new(Source::TUNER),
+            });
+        amp_state.zones.insert(
+            ZoneNumber::Two,
+            ZoneState{
+                power: Cell::new(false),
+                volume: Cell::new(20),
+                mute: Cell::new(true),
+                source: Cell::new(Source::FollowZone1),
+            });
         amp_state
     }
 }
@@ -125,7 +139,7 @@ fn create_command_response(zone: ZoneNumber, cc: Command, values: &[u8], amp_sta
             if values[0] != REQUEST_VALUE {
                 Err("Not implemented.".to_string())
             } else {
-                Ok(create_response(zone, cc, AnswerCode::StatusUpdate, &[amp_state.source.get() as u8]).unwrap())
+                Ok(create_response(zone, cc, AnswerCode::StatusUpdate, &[amp_state.zones[&zone].source.get() as u8]).unwrap())
             },
         Command::RequestMuteStatus =>
             if values[0] != REQUEST_VALUE {

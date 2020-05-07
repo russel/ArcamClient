@@ -42,14 +42,16 @@ pub struct ControlWindow {
     address: gtk::Entry,
     connect_display: gtk::Label,
     connect_chooser: gtk::CheckButton,
-    source_display: gtk::Label,
-    source_chooser: gtk::ComboBoxText,
     brightness_display: gtk::Label,
     brightness_chooser: gtk::ComboBoxText,
+    zone_1_source_display: gtk::Label,
+    zone_1_source_chooser: gtk::ComboBoxText,
     zone_1_volume_display: gtk::Label,
     zone_1_volume_chooser: gtk::SpinButton,
     zone_1_mute_display: gtk::Label,
     zone_1_mute_chooser: gtk::CheckButton,
+    zone_2_source_display: gtk::Label,
+    zone_2_source_chooser: gtk::ComboBoxText,
     zone_2_volume_display: gtk::Label,
     zone_2_volume_chooser: gtk::SpinButton,
     zone_2_mute_display: gtk::Label,
@@ -95,14 +97,16 @@ impl ControlWindow {
         let address: gtk::Entry = builder.get_object("address").unwrap();
         let connect_display: gtk::Label = builder.get_object("connect_display").unwrap();
         let connect_chooser: gtk::CheckButton = builder.get_object("connect_chooser").unwrap();
-        let source_display: gtk::Label = builder.get_object("source_display").unwrap();
-        let source_chooser: gtk::ComboBoxText= builder.get_object("source_chooser").unwrap();
         let brightness_display: gtk::Label = builder.get_object("brightness_display").unwrap();
         let brightness_chooser: gtk::ComboBoxText = builder.get_object("brightness_chooser").unwrap();
+        let zone_1_source_display: gtk::Label = builder.get_object("zone_1_source_display").unwrap();
+        let zone_1_source_chooser: gtk::ComboBoxText= builder.get_object("zone_1_source_chooser").unwrap();
         let zone_1_volume_display: gtk::Label = builder.get_object("zone_1_volume_display").unwrap();
         let zone_1_volume_chooser: gtk::SpinButton = builder.get_object("zone_1_volume_chooser").unwrap();
         let zone_1_mute_display: gtk::Label = builder.get_object("zone_1_mute_display").unwrap();
         let zone_1_mute_chooser: gtk::CheckButton = builder.get_object("zone_1_mute_chooser").unwrap();
+        let zone_2_source_display: gtk::Label = builder.get_object("zone_2_source_display").unwrap();
+        let zone_2_source_chooser: gtk::ComboBoxText= builder.get_object("zone_2_source_chooser").unwrap();
         let zone_2_volume_display: gtk::Label = builder.get_object("zone_2_volume_display").unwrap();
         let zone_2_volume_chooser: gtk::SpinButton = builder.get_object("zone_2_volume_chooser").unwrap();
         let zone_2_mute_display: gtk::Label = builder.get_object("zone_2_mute_display").unwrap();
@@ -116,14 +120,16 @@ impl ControlWindow {
             address,
             connect_display,
             connect_chooser,
-            source_display,
-            source_chooser,
             brightness_display,
             brightness_chooser,
+            zone_1_source_display,
+            zone_1_source_chooser,
             zone_1_volume_display,
             zone_1_volume_chooser,
             zone_1_mute_display,
             zone_1_mute_chooser,
+            zone_2_source_display,
+            zone_2_source_chooser,
             zone_2_volume_display,
             zone_2_volume_chooser,
             zone_2_mute_display,
@@ -240,6 +246,36 @@ impl ControlWindow {
                 }
             }
         });
+        glib::source::timeout_add_seconds_local(2, {
+            let c_w = control_window.clone() ;
+            move || {
+                let connected = c_w.get_connect_display_value();
+                if c_w.connect_chooser.get_active() != connected {
+                    c_w.connect_chooser.set_active(connected);
+                };
+                let brightness_id = c_w.brightness_display.get_text().unwrap().as_str().to_string();
+                if c_w.brightness_chooser.get_active_id().unwrap() != brightness_id {
+                    c_w.brightness_chooser.set_active_id(Some(&brightness_id));
+                }
+                let zone_1_source_id = c_w.zone_1_source_display.get_text().unwrap().as_str().to_string();
+                if c_w.zone_1_source_chooser.get_active_id().unwrap() != zone_1_source_id {
+                    c_w.zone_1_source_chooser.set_active_id(Some(&zone_1_source_id));
+                }
+                let zone_1_volume = c_w.get_volume_display_value(ZoneNumber::One) as f64;
+                if c_w.zone_1_volume_chooser.get_value() != zone_1_volume {
+                    c_w.zone_1_volume_chooser.set_value(zone_1_volume);
+                };
+                let zone_2_source_id = c_w.zone_2_source_display.get_text().unwrap().as_str().to_string();
+                if c_w.zone_2_source_chooser.get_active_id().unwrap() != zone_2_source_id {
+                    c_w.zone_2_source_chooser.set_active_id(Some(&zone_2_source_id));
+                }
+                let zone_2_volume = c_w.get_volume_display_value(ZoneNumber::Two) as f64;
+                if c_w.zone_2_volume_chooser.get_value() != zone_2_volume {
+                    c_w.zone_2_volume_chooser.set_value(zone_2_volume);
+                };
+                Continue(true)
+            }
+        });
         control_window
     }
 
@@ -251,41 +287,21 @@ impl ControlWindow {
         self.connect_display.set_text(if on { "Connected" } else { "Not connected" });
     }
 
-    pub fn set_source_display(self: &Self, source: Source) {
-        self.source_display.set_text(&format!("{:?}", source));
-        if source == Source::TUNER { self.radio_data.show(); }
-        else { self.radio_data.hide(); }
-        self.set_source_chooser(source);
-    }
-
-    pub fn set_source_chooser(self: &Self, source: Source) {
-        self.source_chooser.set_active_id(Some(&format!("{:?}", source)));
-    }
-
     pub fn set_brightness_display(self: &Self, level: Brightness) {
         let brightness_id= format!("{:?}", level);
         self.brightness_display.set_text(&brightness_id);
-        self.set_brightness_chooser(level);
+        self.brightness_chooser.set_active_id(Some(&format!("{:?}", level)));
     }
 
-    pub fn set_brightness_chooser(self: &Self, level: Brightness) {
-        let brightness_id= format!("{:?}", level);
-        self.brightness_chooser.set_active_id(Some(&brightness_id));
-    }
-
-    pub fn set_mute_display(self: &Self, zone: ZoneNumber, on_off: bool) {
-        let text = if on_off { "On" } else { "Muted" };
-        match zone {
-            ZoneNumber::One => self.zone_1_mute_display.set_text(text),
-            ZoneNumber::Two => self.zone_2_mute_display.set_text(text),
-        }
-    }
-
-    pub fn set_mute_chooser(self: &Self, zone: ZoneNumber, on_off: bool) {
-        match zone {
-            ZoneNumber::One => self.zone_1_mute_chooser.set_mode(on_off),
-            ZoneNumber::Two => self.zone_2_mute_chooser.set_mode(on_off),
-        }
+    pub fn set_source_display(self: &Self, zone: ZoneNumber, source: Source) {
+        let (source_display, source_chooser) = match zone {
+            ZoneNumber::One => (&self.zone_1_source_display, &self.zone_1_source_chooser),
+            ZoneNumber::Two => (&self.zone_2_source_display, &self.zone_2_source_chooser),
+        };
+        source_display.set_text(&format!("{:?}", source));
+        if source == Source::TUNER { self.radio_data.show(); }
+        else { self.radio_data.hide(); }
+        source_chooser.set_active_id(Some(&format!("{:?}", source)));
     }
 
     pub fn set_volume_display(self: &Self, zone: ZoneNumber, volume: f64) {
@@ -297,11 +313,11 @@ impl ControlWindow {
         }
     }
 
-    pub fn set_volume_chooser(self: &Self, zone: ZoneNumber, volume: f64) {
-        assert!(volume < 100.0);
+    pub fn set_mute_display(self: &Self, zone: ZoneNumber, on_off: bool) {
+        let text = if on_off { "On" } else { "Muted" };
         match zone {
-            ZoneNumber::One => self.zone_1_volume_chooser.set_value(volume),
-            ZoneNumber::Two => self.zone_2_volume_chooser.set_value(volume),
+            ZoneNumber::One => self.zone_1_mute_display.set_text(text),
+            ZoneNumber::Two => self.zone_2_mute_display.set_text(text),
         }
     }
 
@@ -328,8 +344,29 @@ impl ControlWindow {
         }
     }
 
-    pub fn get_connect_chooser_value(self: &Self) -> bool {
-        self.connect_chooser.get_active() as bool
+    pub fn get_source_display_value(self: &Self, zone: ZoneNumber) -> Source {
+        let source_display= match zone {
+            ZoneNumber::One => &self.zone_1_source_display,
+            ZoneNumber::Two => &self.zone_2_source_display,
+        };
+        match source_display.get_text().unwrap().as_str() {
+            "CD" => Source::CD,
+            "BD" => Source::BD,
+            "AV" => Source::AV,
+            "SAT" => Source::SAT,
+            "PVR" => Source::PVR,
+            "VCR" => Source::VCR,
+            "AUX" => Source::AUX,
+            "DISPLAY" => Source::DISPLAY,
+            "TUNER" => Source::TUNER,  // TUNER (FM)
+            "TUNERDAB" => Source::TUNERDAB,  // (AVR450/750 only)
+            "NET" => Source::NET,
+            "USB" => Source::USB,
+            "STB" => Source::STB,
+            "GAME" => Source::GAME,
+            "FollowZone1" => Source::FollowZone1,
+            x => panic!("Illegal source setting."),
+        }
     }
 
     pub fn get_brightness_display_value(self: &Self) -> Brightness {
@@ -401,4 +438,11 @@ impl ControlWindow {
     //  ui_test has to hack the state.
     pub fn get_to_comms_manager_field(self: &Self) -> &RefCell<Option<futures::channel::mpsc::Sender<Vec<u8>>>> { &self.to_comms_manager }
 
+    pub fn set_volume_chooser(self: &Self, zone: ZoneNumber, value: f64) {
+        let item = match zone {
+            ZoneNumber::One => &self.zone_1_volume_chooser,
+            ZoneNumber::Two => &self.zone_2_volume_chooser,
+        };
+        item.set_value(value);
+    }
 }
