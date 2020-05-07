@@ -120,8 +120,6 @@ fn communications_test() {
                     None => assert!(false, "Failed to get a value from the response queue."),
                 };
 
-
-
                 // Terminate the application once all tests are run.
                 eprintln!("communications_test::communications_test: send termination signal.");
                 glib::source::timeout_add_seconds_local(1, {
