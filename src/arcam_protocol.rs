@@ -121,6 +121,17 @@ pub enum Brightness {
     Level2 = 2,
 }
 
+impl From<&str> for Brightness {
+    fn from(s: &str) -> Self {
+        match s {
+            "Off" => Brightness::Off,
+            "Level1" => Brightness::Level1,
+            "Level2" => Brightness::Level2,
+            x => panic!("Illegal brightness value from display – {}", x),
+        }
+    }
+}
+
 /// The various sources.
 ///
 /// AVR450 and AVR750 separate FM and DAB whilst other models, including AVR850
@@ -144,6 +155,29 @@ pub enum Source {
 
     // Zone 2 can follow Zone 1. Add this value to deal with this.
     FollowZone1 = 0xff,
+}
+
+impl From<&str> for Source {
+    fn from(s: &str) -> Self {
+        match s {
+            "CD" => Source::CD,
+            "BD" => Source::BD,
+            "AV" => Source::AV,
+            "SAT" => Source::SAT,
+            "PVR" => Source::PVR,
+            "VCR" => Source::VCR,
+            "AUX" => Source::AUX,
+            "DISPLAY" => Source::DISPLAY,
+            "TUNER" => Source::TUNER,  // TUNER (FM)
+            "TUNERDAB" => Source::TUNERDAB,  // (AVR450/750 only)
+            "NET" => Source::NET,
+            "USB" => Source::USB,
+            "STB" => Source::STB,
+            "GAME" => Source::GAME,
+            "FollowZone1" => Source::FollowZone1,
+            x => panic!("Illegal source setting."),
+        }
+    }
 }
 
 /// The value used as the start of packet value.

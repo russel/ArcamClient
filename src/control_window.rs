@@ -349,33 +349,11 @@ impl ControlWindow {
             ZoneNumber::One => &self.zone_1_source_display,
             ZoneNumber::Two => &self.zone_2_source_display,
         };
-        match source_display.get_text().unwrap().as_str() {
-            "CD" => Source::CD,
-            "BD" => Source::BD,
-            "AV" => Source::AV,
-            "SAT" => Source::SAT,
-            "PVR" => Source::PVR,
-            "VCR" => Source::VCR,
-            "AUX" => Source::AUX,
-            "DISPLAY" => Source::DISPLAY,
-            "TUNER" => Source::TUNER,  // TUNER (FM)
-            "TUNERDAB" => Source::TUNERDAB,  // (AVR450/750 only)
-            "NET" => Source::NET,
-            "USB" => Source::USB,
-            "STB" => Source::STB,
-            "GAME" => Source::GAME,
-            "FollowZone1" => Source::FollowZone1,
-            x => panic!("Illegal source setting."),
-        }
+        source_display.get_text().unwrap().as_str().into()
     }
 
     pub fn get_brightness_display_value(self: &Self) -> Brightness {
-        match self.brightness_display.get_text().unwrap().as_str() {
-            "Off" => Brightness::Off,
-            "Level1" => Brightness::Level1,
-            "Level2" => Brightness::Level2,
-            x => panic!("Illegal brightness value from display – {}", x),
-        }
+        self.brightness_display.get_text().unwrap().as_str().into()
     }
 
     pub fn get_volume_display_value(self: &Self, zone: ZoneNumber) -> u8 {
