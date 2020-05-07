@@ -24,15 +24,17 @@ use std::io::{Write, Read};
 use std::net::{SocketAddr, TcpStream};
 use std::str::from_utf8;
 
-use arcamclient::arcam_protocol::{
-    ZoneNumber, Command, AnswerCode,
-    REQUEST_VALUE,
-    create_request, parse_response,
-};
+use arcamclient::arcam_protocol::{ZoneNumber, Command, AnswerCode, REQUEST_VALUE, create_request, parse_response, Source};
+
+fn connect_to_mock_avr850() -> Result<TcpStream, String> {
+    match TcpStream::connect(SocketAddr::from(([127, 0, 0, 1], unsafe { start_avr850::PORT_NUMBER }))) {
+        Ok(stream) => Ok(stream),
+        Err(e) => Err(format!("Could not connect to mock AVR850: {:?}", e)),
+    }
+}
 
 fn connect_mock_avr850_send_and_receive(send_data: &[u8]) -> Result<Vec<u8>, String> {
-    let port_number: u16 = unsafe { start_avr850::PORT_NUMBER };
-    match TcpStream::connect(SocketAddr::from(([127, 0, 0, 1], port_number))) {
+    match connect_to_mock_avr850() {
         Ok(mut stream) => {
             match stream.write(send_data) {
                 Ok(send_count) => {
@@ -76,4 +78,100 @@ fn get_default_brightness() {
             (ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![1], 7)),
         Err(e) => assert!(false, e),
     };
+}
+
+#[test]
+fn send_multi_packet_message() {
+     let mut send_data = create_request(ZoneNumber::One, Command::DisplayBrightness, &[REQUEST_VALUE]).unwrap();
+    send_data.append(&mut create_request(ZoneNumber::One, Command::RequestCurrentSource, &[REQUEST_VALUE]).unwrap());
+    send_data.append(&mut create_request(ZoneNumber::Two, Command::RequestCurrentSource, &[REQUEST_VALUE]).unwrap());
+    match connect_to_mock_avr850() {
+        Ok(mut stream) => {
+            match stream.write(&send_data) {
+                Ok(send_count) => {
+                    assert_eq!(send_count, send_data.len());
+                    let mut buffer = [0; 1024];
+                    let mut response_count = 0;
+                    match stream.read(&mut buffer) {
+                        Ok(receive_count) => {
+                            if receive_count > 0 {
+                                let mut data = buffer[..receive_count].to_owned();
+                                assert_eq!(
+                                    parse_response(&data).unwrap(),
+                                    (ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![0x01], 7)
+                                );
+                                response_count += 1;
+                                if data.len() > 7 {
+                                    for _ in 0..7 { data.remove(0); }
+                                    assert_eq!(
+                                        parse_response(&data).unwrap(),
+                                        (ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::TUNER as u8], 7)
+                                    );
+                                    response_count += 1;
+                                    if data.len() > 7 {
+                                        for _ in 0..7 { data.remove(0); }
+                                        eprintln!("YYYYYY {:?}", data);
+                                        assert_eq!(
+                                            parse_response(&data).unwrap(),
+                                            (ZoneNumber::Two, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::FollowZone1 as u8], 7)
+                                        );
+                                        response_count += 1;
+                                    }
+                                }
+                            } else {
+                                assert!(false, "Zero length datum received.")
+                            }
+                            assert!(response_count > 0);
+                            if response_count < 3 {
+                                match stream.read(&mut buffer) {
+                                    Ok(receive_count) => {
+                                        if receive_count > 0 {
+                                            let mut data = buffer[..receive_count].to_owned();
+                                            assert_eq!(
+                                                parse_response(&data).unwrap(),
+                                                (ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::TUNER as u8], 7)
+                                            );
+                                            response_count += 1;
+                                            if data.len() > 7 {
+                                                for _ in 0..7 { data.remove(0); }
+                                                eprintln!("YYYYYY {:?}", data);
+                                                assert_eq!(
+                                                    parse_response(&data).unwrap(),
+                                                    (ZoneNumber::Two, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::FollowZone1 as u8], 7)
+                                                );
+                                                response_count += 1;
+                                            }
+                                        } else {
+                                            assert!(false, "Zero length datum received.")
+                                        }
+                                    },
+                                    Err(e) => assert!(false, "Failed to read: {:?}", e),
+                                }
+                            }
+                            assert!(response_count > 1);
+                            if response_count < 3 {
+                                match stream.read(&mut buffer) {
+                                    Ok(receive_count) => {
+                                        if receive_count > 0 {
+                                            let mut data = buffer[..receive_count].to_owned();
+                                            assert_eq!(
+                                                parse_response(&data).unwrap(),
+                                                (ZoneNumber::Two, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::FollowZone1 as u8], 7)
+                                            );
+                                            response_count += 1;
+                                        }
+                                    },
+                                    Err(e) => assert!(false, "Failed to read: {:?}", e),
+                                };
+                            }
+                        },
+                        Err(e) => assert!(false, "Failed to read: {:?}", e),
+                    }
+                    assert_eq!(response_count, 3);
+                },
+                Err(e) => assert!(false, "Could not send message to mock AVR850: {:?}", e),
+            }
+        },
+        Err(e) => assert!(false, e),
+    }
 }
