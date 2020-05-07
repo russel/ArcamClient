@@ -393,6 +393,15 @@ mod tests {
         );
     }
 
+    #[test]
+    fn parse_buffer_with_multiple_response_packets() {
+        let input = [33, 1, 29, 0, 1, 11, 13, 33, 1, 1, 0, 1, 1, 13, 33, 1, 13, 0, 1, 30, 13];
+        assert_eq!(
+            parse_response(&input).unwrap(),
+            (ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![11u8], 7)
+        );
+    }
+
     //  Some real response packets from an AVR850.
 
     #[test]
@@ -445,15 +454,6 @@ mod tests {
                   32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
                   32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,]
              , 135)
-        );
-    }
-
-    #[test]
-    fn parse_buffer_with_multiple_response_packets() {
-        let input = [33, 1, 29, 0, 1, 11, 13, 33, 1, 1, 0, 1, 1, 13, 33, 1, 13, 0, 1, 30, 13];
-        assert_eq!(
-            parse_response(&input).unwrap(),
-            (ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![11u8], 7)
         );
     }
 
