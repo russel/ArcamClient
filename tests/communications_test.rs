@@ -78,7 +78,8 @@ fn communications_test() {
 
                 send_request(
                     &mut sender,
-                    &create_request(ZoneNumber::One, Command::DisplayBrightness, &[REQUEST_VALUE]).unwrap());
+                    &create_request(ZoneNumber::One, Command::DisplayBrightness, &[REQUEST_VALUE]).unwrap()
+                );
                 match rx_queue.next().await {
                     Some(s) => assert_eq!(s, create_response(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, &[0x01]).unwrap()),
                     None => assert!(false, "Failed to get a value from the response queue."),
@@ -97,6 +98,19 @@ fn communications_test() {
                     &mut sender,
                     &create_request(ZoneNumber::One, Command::RequestCurrentSource, &[REQUEST_VALUE]).unwrap()
                 );
+                match rx_queue.next().await {
+                    Some(s) => assert_eq!(s, create_response(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, &[Source::TUNER as u8]).unwrap()),
+                    None => assert!(false, "Failed to get a value from the response queue."),
+                };
+
+                // Send a multi-packet request.
+                let mut buffer = create_request(ZoneNumber::One, Command::DisplayBrightness, &[REQUEST_VALUE]).unwrap();
+                buffer.append(&mut create_request(ZoneNumber::One, Command::RequestCurrentSource, &[REQUEST_VALUE]).unwrap());
+                send_request(&mut sender, &buffer);
+                match rx_queue.next().await {
+                    Some(s) => assert_eq!(s, create_response(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, &[0x01]).unwrap()),
+                    None => assert!(false, "Failed to get a value from the response queue."),
+                };
                 match rx_queue.next().await {
                     Some(s) => assert_eq!(s, create_response(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, &[Source::TUNER as u8]).unwrap()),
                     None => assert!(false, "Failed to get a value from the response queue."),
