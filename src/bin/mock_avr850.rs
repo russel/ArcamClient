@@ -58,14 +58,22 @@ use std::cell::Cell;
 use std::collections::HashMap;
 use std::env::args;
 use std::io::{Read, Write};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::str::from_utf8;
+
+//use gio;
+//use gio::prelude::*;
+
+//use futures;
+//use futures::AsyncReadExt;
+//use futures::AsyncWriteExt;
 
 use arcamclient::arcam_protocol::{
     AnswerCode, Brightness, Command, Source, ZoneNumber,
     PACKET_START, REQUEST_VALUE,
     create_response, parse_request,
 };
+use arcamclient::socket_support::{SocketClient, SocketConnection, SocketListener};
 
 /// Zone state for an AVR. An AVR comprises a number of zones.
 #[derive(Debug)]
@@ -212,6 +220,24 @@ fn create_default_amp_then_listen_on(address: &SocketAddr) -> Result<(), ()> {
         }
     }
 }
+
+/*
+async fn process_a_connection() -> Result<(), ()>{
+    Ok(())
+}
+
+async fn do_the_connection_listener(port_number: u16) -> Result<(), ()> {
+    let mut amp_state: AmpState = Default::default();
+    let server = SocketListener::new();
+    server.add_inet_port(port_number);
+    for connection in server.incoming() {
+        let x = connection.get_remote_address();
+        //eprintln!("mock_avr850: got a connection from {}:{}", a, sss.get_port());
+    };
+    //server.close();
+    Ok(())
+}
+*/
 
 /// Start the mock AVR850.
 ///

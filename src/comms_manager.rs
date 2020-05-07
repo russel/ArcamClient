@@ -66,8 +66,14 @@ async fn start_a_connection_and_set_up_event_listeners(
     eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: setting up connection to {}:{}", address.get_hostname().unwrap(), address.get_port());
     let client = SocketClient::new();
     let connection = match client.connect(&address).await {
-        Ok(s) => { s },
-        Err(_) => { eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: failed to connect to {}:{}", address.get_hostname().unwrap(), address.get_port()); return },
+        Ok(s) => {
+            eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: connected to {}:{}", address.get_hostname().unwrap(), address.get_port());
+            s
+        },
+        Err(_) => {
+            eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: failed to connect to {}:{}", address.get_hostname().unwrap(), address.get_port());
+            return
+        },
     };
     let (reader, mut writer) = connection.split();
     let context = glib::MainContext::default();

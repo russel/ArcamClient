@@ -21,6 +21,7 @@ gtk = {version="*", features=["v3_18"]}
 lazy_static = "*"
 num-traits = "*"
 num-derive = "*"
+pin-utils = "*"
 rand = "*"
 
 [dev-dependencies]
