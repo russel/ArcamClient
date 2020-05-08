@@ -55,6 +55,18 @@ pub struct SocketConnection {
     write: gio::OutputStreamAsyncWrite<gio::PollableOutputStream>,
 }
 
+impl SocketConnection {
+
+    pub fn get_local_address(self: &Self) -> Result<gio::SocketAddress, glib::Error> {
+        self.connection.get_local_address()
+    }
+
+    pub fn get_remote_address(self: &Self) -> Result<gio::SocketAddress, glib::Error> {
+        self.connection.get_remote_address()
+    }
+
+}
+
 impl AsyncRead for SocketConnection {
     fn poll_read(
         self: Pin<&mut Self>,
@@ -92,6 +104,16 @@ impl SocketListener {
 
     pub fn add_inet_port(&self, port: u16) -> Result<(), glib::Error> {
         self.0.add_inet_port(port, None::<&glib::Object>)
+    }
+
+    pub fn add_address<P: IsA<gio::SocketAddress>, Q: IsA<glib::Object>>(
+        &self,
+        address: &P,
+        type_: gio::SocketType,
+        protocol: gio::SocketProtocol,
+        source_object: Option<&Q>
+    ) -> Result<gio::SocketAddress, glib::Error> {
+        self.0.add_address(address, type_, protocol, source_object)
     }
 
     pub async fn accept(&self) -> Result<SocketConnection, glib::Error> {
