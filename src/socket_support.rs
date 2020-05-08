@@ -3,6 +3,7 @@
  *  See  https://github.com/gtk-rs/gio/issues/293
  */
 
+use std::future::Future;
 use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -125,7 +126,6 @@ impl SocketListener {
 
 pub struct Incoming<'a>(&'a SocketListener);
 
-/*
 impl<'a> Stream for Incoming<'a> {
     type Item = Result<SocketConnection, glib::Error>;
 
@@ -137,4 +137,4 @@ impl<'a> Stream for Incoming<'a> {
         Poll::Ready(Some(Ok(socket)))
     }
 }
- */
+
