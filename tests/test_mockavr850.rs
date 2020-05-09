@@ -100,7 +100,7 @@ fn send_multi_packet_message() {
         for _ in 0..7 { data.remove(0); }
         assert_eq!(
             parse_response(&data).unwrap(),
-            (ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::TUNER as u8], 7)
+            (ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::CD as u8], 7)
         );
         response_count += 1;
         if data.len() > 7 {
@@ -118,7 +118,7 @@ fn send_multi_packet_message() {
         data = buffer[..receive_count].to_owned();
         assert_eq!(
             parse_response(&data).unwrap(),
-            (ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::TUNER as u8], 7)
+            (ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::CD as u8], 7)
         );
         response_count += 1;
         if data.len() > 7 {

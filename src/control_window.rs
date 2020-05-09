@@ -375,11 +375,11 @@ impl ControlWindow {
             ZoneNumber::Two => self.zone_2_mute_display.get_text(),
         } {
             Some(s) => match s.as_str() {
-                "Muted" => false,
-                "On" => true,
+                "Muted" => true,
+                "On" => false,
                 x => panic!("Illegal value for muted – {}", x),
             },
-            None => true,
+            None => panic!("Could not get UI mute status for zone {:?}", zone),
         }
     }
 

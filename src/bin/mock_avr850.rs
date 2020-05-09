@@ -62,9 +62,9 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::str::from_utf8;
 
 use arcamclient::arcam_protocol::{
-    AnswerCode, Brightness, Command, Source, ZoneNumber,
+    AnswerCode, Brightness, Command, RC5Command, Source, ZoneNumber,
     PACKET_START, REQUEST_VALUE,
-    create_response, parse_request,
+    create_response, get_rc5command_data, parse_request,
 };
 
 /// Zone state for an AVR. An AVR comprises a number of zones.
@@ -95,7 +95,7 @@ impl Default for AmpState {
                 power: Cell::new(true),
                 volume: Cell::new(30),
                 mute: Cell::new(false),
-                source: Cell::new(Source::TUNER),
+                source: Cell::new(Source::CD),
             });
         amp_state.zones.insert(
             ZoneNumber::Two,
@@ -112,13 +112,16 @@ impl Default for AmpState {
 /// Return a response to a given request updating the state of the mock amp as needed.
 fn create_command_response(zone: ZoneNumber, cc: Command, values: &[u8], amp_state: &mut AmpState) -> Result<Vec<u8>, String>{
     match cc {
-        Command::DisplayBrightness =>
+        Command::DisplayBrightness => {
+            assert_eq!(values.len(), 1);
             if values[0] != REQUEST_VALUE {
                 Err(format!("Incorrect DisplayBrightness request {:?}", values[0]))
             } else {
                 Ok(create_response(zone, cc, AnswerCode::StatusUpdate, &[amp_state.brightness.get() as u8]).unwrap())
-            },
-        Command::SetRequestVolume =>
+            }
+        },
+        Command::SetRequestVolume => {
+            assert_eq!(values.len(), 1);
             if values[0] == REQUEST_VALUE {
                 Ok(create_response(zone, cc, AnswerCode::StatusUpdate, [amp_state.zones[&zone].volume.get()].as_ref()).unwrap())
             } else if values[0] < 100 {
@@ -127,19 +130,43 @@ fn create_command_response(zone: ZoneNumber, cc: Command, values: &[u8], amp_sta
             } else {
                 Err(format!("Failed to deal with SetRequestVolume command {:?}", cc))
             }
-        Command::RequestCurrentSource =>
+        },
+        Command::RequestCurrentSource => {
+            assert_eq!(values.len(), 1);
             if values[0] != REQUEST_VALUE {
                 Err("Not implemented.".to_string())
             } else {
                 Ok(create_response(zone, cc, AnswerCode::StatusUpdate, &[amp_state.zones[&zone].source.get() as u8]).unwrap())
-            },
-        Command::RequestMuteStatus =>
+            }
+        },
+        Command::RequestMuteStatus => {
+            assert_eq!(values.len(), 1);
             if values[0] != REQUEST_VALUE {
                 Err("Not implemented.".to_string())
             } else {
-                Ok(create_response(zone, cc, AnswerCode::StatusUpdate, &[amp_state.zones[&zone].mute.get() as u8]).unwrap())
-            },
-        Command::VideoSelection => Err("Not implemented.".to_string()),
+                let is_mute = if amp_state.zones[&zone].mute.get() { 0u8 } else { 1u8 };
+                Ok(create_response(zone, cc, AnswerCode::StatusUpdate, &[is_mute]).unwrap())
+            }
+        },
+        Command::SimulateRC5IRCommand => {
+            assert_eq!(values.len(), 2);
+            let rc5command: RC5Command = (values[0], values[1]).into();
+            match rc5command {
+                RC5Command::DisplayOff => {
+                    amp_state.brightness.set(Brightness::Off);
+                    Ok(create_response(zone, cc, AnswerCode::StatusUpdate, values).unwrap())
+                },
+                RC5Command::DisplayL1 => {
+                    amp_state.brightness.set(Brightness::Level1);
+                    Ok(create_response(zone, cc, AnswerCode::StatusUpdate, values).unwrap())
+                },
+                RC5Command::DisplayL2 => {
+                    amp_state.brightness.set(Brightness::Level2);
+                    Ok(create_response(zone, cc, AnswerCode::StatusUpdate, values).unwrap())
+                },
+                _ => Err("Not implemented.".to_string())
+            }
+        },
         x => Err(format!("Failed to deal with command {:?}", x)),
     }
 }
@@ -247,9 +274,9 @@ mod tests {
     use super::{AmpState, create_command_response};
 
     use arcamclient::arcam_protocol::{
-        AnswerCode, Brightness, Command, ZoneNumber,
+        AnswerCode, Brightness, Command, RC5Command, Source, ZoneNumber,
         REQUEST_VALUE,
-        create_response
+        create_response, get_rc5command_data,
     };
 
     #[test]
@@ -263,6 +290,38 @@ mod tests {
     }
 
     #[test]
+    fn set_display_brightness_error() {
+        let mut amp_state: AmpState = Default::default();
+        assert_eq!(amp_state.brightness.get(), Brightness::Level1);
+        match create_command_response(ZoneNumber::One, Command::DisplayBrightness, &mut [0x01], &mut amp_state) {
+            Ok(_) => assert!(false),
+            Err(e) => assert_eq!(e, "Incorrect DisplayBrightness request 1"),
+        }
+        assert_eq!(amp_state.brightness.get(), Brightness::Level1);
+    }
+
+    #[test]
+    fn set_display_brightness() {
+        let mut amp_state: AmpState = Default::default();
+        assert_eq!(amp_state.brightness.get(), Brightness::Level1);
+        let (rc5_data_1, rc5_data_2) = get_rc5command_data(RC5Command::DisplayL2);
+        assert_eq!(
+            create_command_response(ZoneNumber::One, Command::SimulateRC5IRCommand, &mut [rc5_data_1, rc5_data_2], &mut amp_state).unwrap(),
+            create_response(ZoneNumber::One, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, &[rc5_data_1, rc5_data_2]).unwrap());
+        assert_eq!(amp_state.brightness.get(), Brightness::Level2);
+    }
+
+    #[test]
+    fn get_zone_1_volume() {
+        let mut amp_state: AmpState = Default::default();
+        assert_eq!(amp_state.zones[&ZoneNumber::One].volume.get(), 30);
+        assert_eq!(
+            create_command_response(ZoneNumber::One, Command::SetRequestVolume, &mut [REQUEST_VALUE], &mut amp_state).unwrap(),
+            create_response(ZoneNumber::One, Command::SetRequestVolume, AnswerCode::StatusUpdate, &[0x1e]).unwrap());
+        assert_eq!(amp_state.zones[&ZoneNumber::One].volume.get(), 30);
+    }
+
+    #[test]
     fn set_zone_1_volume() {
         let mut amp_state: AmpState = Default::default();
         assert_eq!(amp_state.zones[&ZoneNumber::One].volume.get(), 30);
@@ -271,4 +330,106 @@ mod tests {
             create_response(ZoneNumber::One, Command::SetRequestVolume, AnswerCode::StatusUpdate, &[0x0f]).unwrap());
         assert_eq!(amp_state.zones[&ZoneNumber::One].volume.get(), 15);
     }
+
+    #[test]
+    fn get_zone_2_volume() {
+        let mut amp_state: AmpState = Default::default();
+        assert_eq!(amp_state.zones[&ZoneNumber::Two].volume.get(), 20);
+        assert_eq!(
+            create_command_response(ZoneNumber::Two, Command::SetRequestVolume, &mut [REQUEST_VALUE], &mut amp_state).unwrap(),
+            create_response(ZoneNumber::Two, Command::SetRequestVolume, AnswerCode::StatusUpdate, &[0x14]).unwrap());
+        assert_eq!(amp_state.zones[&ZoneNumber::Two].volume.get(), 20);
+    }
+
+    #[test]
+    fn set_zone_2_volume() {
+        let mut amp_state: AmpState = Default::default();
+        assert_eq!(amp_state.zones[&ZoneNumber::Two].volume.get(), 20);
+        assert_eq!(
+            create_command_response(ZoneNumber::Two, Command::SetRequestVolume, &mut [0x0f], &mut amp_state).unwrap(),
+            create_response(ZoneNumber::Two, Command::SetRequestVolume, AnswerCode::StatusUpdate, &[0x0f]).unwrap());
+        assert_eq!(amp_state.zones[&ZoneNumber::Two].volume.get(), 15);
+    }
+
+    #[test]
+    fn get_zone_1_mute_state() {
+        let mut amp_state: AmpState = Default::default();
+        assert_eq!(amp_state.zones[&ZoneNumber::One].mute.get(), false);
+        assert_eq!(
+            create_command_response(ZoneNumber::One, Command::RequestMuteStatus, &mut [REQUEST_VALUE], &mut amp_state).unwrap(),
+            create_response(ZoneNumber::One, Command::RequestMuteStatus, AnswerCode::StatusUpdate, &[0x1]).unwrap());
+        assert_eq!(amp_state.zones[&ZoneNumber::One].mute.get(), false);
+    }
+
+    #[test]
+    fn set_zone_1_mute_state() {
+        let mut amp_state: AmpState = Default::default();
+        assert_eq!(amp_state.zones[&ZoneNumber::One].mute.get(), false);
+        match create_command_response(ZoneNumber::One, Command::RequestMuteStatus, &mut [0x0], &mut amp_state) {
+            Ok(_) => assert!(false),
+            Err(e) => assert_eq!(e, "Not implemented."),
+        }
+    }
+
+   #[test]
+    fn get_zone_2_mute_state() {
+        let mut amp_state: AmpState = Default::default();
+        assert_eq!(amp_state.zones[&ZoneNumber::Two].mute.get(), true);
+        assert_eq!(
+            create_command_response(ZoneNumber::Two, Command::RequestMuteStatus, &mut [REQUEST_VALUE], &mut amp_state).unwrap(),
+            create_response(ZoneNumber::Two, Command::RequestMuteStatus, AnswerCode::StatusUpdate, &[0x0]).unwrap());
+        assert_eq!(amp_state.zones[&ZoneNumber::Two].mute.get(), true);
+    }
+
+    #[test]
+    fn set_zone_2_mute_state() {
+        let mut amp_state: AmpState = Default::default();
+        assert_eq!(amp_state.zones[&ZoneNumber::Two].mute.get(), true);
+        match create_command_response(ZoneNumber::Two, Command::RequestMuteStatus, &mut [0x1], &mut amp_state) {
+            Ok(_) => assert!(false),
+            Err(e) => assert_eq!(e, "Not implemented."),
+        }
+    }
+
+    #[test]
+    fn get_zone_1_source() {
+        let mut amp_state: AmpState = Default::default();
+        assert_eq!(amp_state.zones[&ZoneNumber::One].source.get(), Source::CD);
+        assert_eq!(
+            create_command_response(ZoneNumber::One, Command::RequestMuteStatus, &mut [REQUEST_VALUE], &mut amp_state).unwrap(),
+            create_response(ZoneNumber::One, Command::RequestMuteStatus, AnswerCode::StatusUpdate, &[Source::CD as u8]).unwrap());
+        assert_eq!(amp_state.zones[&ZoneNumber::One].source.get(), Source::CD);
+    }
+
+    #[test]
+    fn set_zone_1_source() {
+        let mut amp_state: AmpState = Default::default();
+        assert_eq!(amp_state.zones[&ZoneNumber::One].source.get(), Source::CD);
+        match create_command_response(ZoneNumber::One, Command::RequestMuteStatus, &mut [Source::TUNER as u8], &mut amp_state) {
+            Ok(_) => assert!(false),
+            Err(e) => assert_eq!(e, "Not implemented."),
+        }
+    }
+
+    #[test]
+    fn get_zone_2_source() {
+        let mut amp_state: AmpState = Default::default();
+        assert_eq!(amp_state.zones[&ZoneNumber::Two].source.get(), Source::FollowZone1);
+        assert_eq!(
+            create_command_response(ZoneNumber::Two, Command::RequestCurrentSource, &mut [REQUEST_VALUE], &mut amp_state).unwrap(),
+            create_response(ZoneNumber::Two, Command::RequestCurrentSource, AnswerCode::StatusUpdate, &[Source::FollowZone1 as u8]).unwrap());
+        assert_eq!(amp_state.zones[&ZoneNumber::Two].source.get(), Source::FollowZone1);
+    }
+
+    #[test]
+    fn set_zone_2_source() {
+        let mut amp_state: AmpState = Default::default();
+        assert_eq!(amp_state.zones[&ZoneNumber::Two].source.get(), Source::FollowZone1);
+        match create_command_response(ZoneNumber::Two, Command::RequestCurrentSource, &mut [Source::TUNER as u8], &mut amp_state) {
+            Ok(_) => assert!(false),
+            Err(e) => assert_eq!(e, "Not implemented."),
+        }
+    }
+
+
 }
