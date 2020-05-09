@@ -521,10 +521,13 @@ impl From<&str> for Brightness {
 
 /// The various sources.
 ///
+/// This is for the `RequestCurrentSource` command.
+///
 /// AVR450 and AVR750 separate FM and DAB whilst other models, including AVR850
 /// have a single source which can flip between FM and DAB.
 #[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
 pub enum Source {
+    FollowZone1 = 0x00,
     CD = 0x01,
     BD = 0x02,
     AV = 0x03,
@@ -539,14 +542,12 @@ pub enum Source {
     USB = 0x0F,
     STB = 0x10,
     GAME = 0x11,
-
-    // Zone 2 can follow Zone 1. Add this value to deal with this.
-    FollowZone1 = 0xff,
 }
 
 impl From<&str> for Source {
     fn from(s: &str) -> Self {
         match s {
+            "FollowZone1" => Source::FollowZone1,
             "CD" => Source::CD,
             "BD" => Source::BD,
             "AV" => Source::AV,
@@ -561,10 +562,23 @@ impl From<&str> for Source {
             "USB" => Source::USB,
             "STB" => Source::STB,
             "GAME" => Source::GAME,
-            "FollowZone1" => Source::FollowZone1,
             x => panic!("Illegal source setting."),
         }
     }
+}
+
+/// The video sources.
+///
+/// The sources as used in the `VideoSelection` command.
+#[derive(Copy, Clone, Debug, Eq, FromPrimitive, PartialEq)]
+pub enum VideoSource {
+    BD = 0x00,
+    SAT = 0x01,
+    AV = 0x02,
+    PVR = 0x03,
+    VCR = 0x04,
+    Game = 0x05,
+    STB = 0x06,
 }
 
 /// The value used as the start of packet value.
