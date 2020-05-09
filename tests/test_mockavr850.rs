@@ -24,7 +24,7 @@ use std::io::{Write, Read};
 use std::net::{SocketAddr, TcpStream};
 use std::str::from_utf8;
 
-use arcamclient::arcam_protocol::{ZoneNumber, Command, AnswerCode, REQUEST_VALUE, create_request, parse_response, Source};
+use arcamclient::arcam_protocol::{AnswerCode, Command, Source, ZoneNumber, REQUEST_VALUE, create_request, get_rc5command_data, parse_response, RC5Command};
 
 fn connect_to_mock_avr850() -> TcpStream {
     match TcpStream::connect(SocketAddr::from(([127, 0, 0, 1], unsafe { start_avr850::PORT_NUMBER }))) {
@@ -72,7 +72,7 @@ fn amx_value() {
 #[test]
 fn get_default_brightness() {
     let data = connect_mock_avr850_send_and_receive(
-        &create_request(ZoneNumber::One, Command::DisplayBrightness, &mut [REQUEST_VALUE]).unwrap()
+        &create_request(ZoneNumber::One, Command::DisplayBrightness, &[REQUEST_VALUE]).unwrap()
     );
     assert_eq!(
         parse_response(&data).unwrap(),
@@ -141,4 +141,17 @@ fn send_multi_packet_message() {
         response_count += 1;
     }
     assert_eq!(response_count, 3);
+}
+
+#[test]
+fn set_zone_1_source_to_bd() {
+    let rc5_data = get_rc5command_data(RC5Command::BD);
+    let data = [rc5_data.0, rc5_data.1];
+    let response_data = connect_mock_avr850_send_and_receive(
+        &create_request(ZoneNumber::One, Command::SimulateRC5IRCommand, &data).unwrap()
+    );
+    assert_eq!(
+        parse_response(&response_data).unwrap(),
+        (ZoneNumber::One, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, data.to_vec(), 8)
+    );
 }

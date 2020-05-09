@@ -237,7 +237,7 @@ pub enum RC5Command {
 lazy_static! {
     // The data for the RC5 commands. Lazy statics cannot be exported it seems
     //  so use an accessor function to get the values.
-    static ref RC5Data: HashMap<RC5Command, (u8, u8)> = {
+    static ref RC5DATA: HashMap<RC5Command, (u8, u8)> = {
         let mut d = HashMap::new();
         d.insert(RC5Command::Standby, (0x10, 0x0c));
         d.insert(RC5Command::One, (0x10, 0x01));
@@ -278,8 +278,8 @@ lazy_static! {
         d.insert(RC5Command::DecreaseVolume, (0x10, 0x11));
         d.insert(RC5Command::Red, (0x10, 0x29));
         d.insert(RC5Command::Green, (0x10, 0x2a));
-        d.insert(RC5Command::Yellow, (0x10, 0x2b));
-        d.insert(RC5Command::Blue, (0x10, 0x37));
+        d.insert(RC5Command::Yellow, (0x10, 0x2b)); // Repeat use of value according to the document.
+        d.insert(RC5Command::Blue, (0x10, 0x37)); // Repeat use of value according to the document.
         d.insert(RC5Command::Radio, (0x10, 0x5b));
         d.insert(RC5Command::Aux, (0x10, 0x63));
         d.insert(RC5Command::Net, (0x10, 0x5c));
@@ -362,7 +362,6 @@ lazy_static! {
 impl From<(u8, u8)> for RC5Command {
     fn from(value: (u8, u8)) -> Self {
         match value {
-            (0x10, 0x00) => RC5Command::Zero,
             (0x10, 0x0c) => RC5Command::Standby,
             (0x10, 0x01) => RC5Command::One,
             (0x10, 0x02) => RC5Command::Two,
@@ -402,8 +401,8 @@ impl From<(u8, u8)> for RC5Command {
             (0x10, 0x11) => RC5Command::DecreaseVolume,
             (0x10, 0x29) => RC5Command::Red,
             (0x10, 0x2a) => RC5Command::Green,
-            (0x10, 0x2b) => RC5Command::Yellow,
-            (0x10, 0x37) => RC5Command::Blue,
+            (0x10, 0x2b) => RC5Command::Yellow, // Repeat use of value according to the document.
+            (0x10, 0x37) => RC5Command::Blue, // Repeat use of value according to the document.
             (0x10, 0x5b) => RC5Command::Radio,
             (0x10, 0x63) => RC5Command::Aux,
             (0x10, 0x5c) => RC5Command::Net,
@@ -485,8 +484,10 @@ impl From<(u8, u8)> for RC5Command {
 }
 
 /// Accessor for the RC5 command data.
+// This is needed because lazy static values seemingly cannot be exported out of the
+// module to another module in the crate, or another crate.
 pub fn get_rc5command_data(rc5command: RC5Command) -> (u8, u8) {
-    RC5Data[&rc5command]
+    RC5DATA[&rc5command]
 }
 
 /// The answer codes (Ac entries) that can be received from the AVR.
@@ -508,6 +509,16 @@ pub enum Brightness {
     Level2 = 2,
 }
 
+impl ToString for Brightness {
+    fn to_string(&self) -> String {
+        match self {
+            Brightness::Off => "Off".to_string(),
+            Brightness::Level1 => "Level1".to_string(),
+            Brightness::Level2 => "Level2".to_string(),
+        }
+    }
+}
+
 impl From<&str> for Brightness {
     fn from(s: &str) -> Self {
         match s {
@@ -522,9 +533,6 @@ impl From<&str> for Brightness {
 /// The various sources.
 ///
 /// This is for the `RequestCurrentSource` command.
-///
-/// AVR450 and AVR750 separate FM and DAB whilst other models, including AVR850
-/// have a single source which can flip between FM and DAB.
 #[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
 pub enum Source {
     FollowZone1 = 0x00,
@@ -536,8 +544,8 @@ pub enum Source {
     VCR = 0x06,
     AUX = 0x08,
     DISPLAY = 0x09,
-    TUNER = 0x0B,  // TUNER (FM)
-    TUNERDAB = 0x0C,  // (AVR450/750 only)
+    TUNER = 0x0B,  // TUNER (FM) according to the documentation.
+    TUNERDAB = 0x0C,  // (AVR450/750 only) according to the documentation.
     NET = 0x0E,
     USB = 0x0F,
     STB = 0x10,
@@ -556,13 +564,13 @@ impl From<&str> for Source {
             "VCR" => Source::VCR,
             "AUX" => Source::AUX,
             "DISPLAY" => Source::DISPLAY,
-            "TUNER" => Source::TUNER,  // TUNER (FM)
-            "TUNERDAB" => Source::TUNERDAB,  // (AVR450/750 only)
+            "TUNER" => Source::TUNER,  // TUNER (FM) according to the documentation.
+            "TUNERDAB" => Source::TUNERDAB,  // (AVR450/750 only) according to the documentation.
             "NET" => Source::NET,
             "USB" => Source::USB,
             "STB" => Source::STB,
             "GAME" => Source::GAME,
-            x => panic!("Illegal source setting."),
+            x => panic!("Illegal source value {}.", x),
         }
     }
 }
@@ -579,6 +587,53 @@ pub enum VideoSource {
     VCR = 0x04,
     Game = 0x05,
     STB = 0x06,
+}
+
+/// An analogue of bool to represent the mute state.
+///
+/// Numeric representation as per `RequestMuteState` return value.
+/// The UI needs a string representation and this avoids spelling errors.
+#[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
+pub enum MuteState {
+    Muted = 0x00,
+    NotMuted = 0x01,
+}
+
+impl ToString for MuteState {
+    fn to_string(&self) -> String {
+        match self {
+            Self::NotMuted => "Not muted".to_string(),
+            Self::Muted => "Muted".to_string(),
+        }
+    }
+}
+
+impl From<&str> for MuteState {
+    fn from(s: &str) -> Self {
+        match s {
+            "Muted" => Self::Muted,
+            "Not muted" => Self::NotMuted,
+            x => panic!("Illegal MuteState value, {}", x),
+        }
+    }
+}
+
+impl From<bool> for MuteState {
+    fn from(b: bool) -> Self {
+        match b {
+            true => Self::Muted,
+            false => Self::NotMuted,
+        }
+    }
+}
+
+impl From<MuteState> for bool {
+    fn from(m: MuteState) -> Self {
+        match m {
+            MuteState::Muted => true,
+            MuteState::NotMuted => false,
+        }
+    }
 }
 
 /// The value used as the start of packet value.
@@ -895,7 +950,7 @@ mod tests {
 
     #[test]
     fn rc5_data_correctly_accessed() {
-        assert_eq!(RC5Data[&RC5Command::Nine], (0x10, 0x09));
+        assert_eq!(RC5DATA[&RC5Command::Nine], (0x10, 0x09));
         assert_eq!(get_rc5command_data(RC5Command::Nine), (0x10, 0x09));
     }
 

@@ -35,7 +35,52 @@ use num_traits::FromPrimitive;
 
 use crate::about;
 use crate::functionality;
-use crate::arcam_protocol::{Brightness, Source, ZoneNumber};
+use crate::arcam_protocol::{Brightness, MuteState, Source, ZoneNumber};
+
+/// An analogue to bool that tries to avoid any spelling errors
+/// in the strings used as representation – needed for the UI.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum ConnectedState {
+    Connected,
+    NotConnected,
+}
+
+impl ToString for ConnectedState {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Connected => "Connected".to_string(),
+            Self::NotConnected => "Not connected".to_string(),
+        }
+    }
+}
+
+impl From<&str> for ConnectedState {
+    fn from(s: &str) -> Self {
+        match s {
+            "Connected" => Self::Connected,
+            "Not connected" => Self::NotConnected,
+            x => panic!("Illegal value for ConnectedState, {}", x),
+        }
+    }
+}
+
+impl From<bool> for ConnectedState {
+    fn from(b: bool) -> Self {
+        match b {
+            true => Self::Connected,
+            false => Self::NotConnected,
+        }
+    }
+}
+
+impl From<ConnectedState> for bool {
+    fn from(c: ConnectedState) -> Self {
+        match c {
+            ConnectedState::Connected => true,
+            ConnectedState::NotConnected => false,
+        }
+    }
+}
 
 pub struct ControlWindow {
     window: gtk::ApplicationWindow,
@@ -211,6 +256,7 @@ impl ControlWindow {
                 } else {
                     eprintln!("control_window::connect_toggled: terminate connection to amp.");
                     functionality::disconnect_from_amp();
+                    c_w.connect_display.set_text(&ConnectedState::NotConnected.to_string());
                 }
             }
         });
@@ -249,15 +295,11 @@ impl ControlWindow {
         glib::source::timeout_add_seconds_local(2, {
             let c_w = control_window.clone() ;
             move || {
-                let connected = c_w.get_connect_display_value();
-                if c_w.connect_chooser.get_active() != connected {
-                    c_w.connect_chooser.set_active(connected);
-                };
-                let brightness_id = c_w.brightness_display.get_text().unwrap().as_str().to_string();
+                let brightness_id = c_w.brightness_display.get_text().unwrap();
                 if c_w.brightness_chooser.get_active_id().unwrap() != brightness_id {
                     c_w.brightness_chooser.set_active_id(Some(&brightness_id));
                 }
-                let zone_1_source_id = c_w.zone_1_source_display.get_text().unwrap().as_str().to_string();
+                let zone_1_source_id = c_w.zone_1_source_display.get_text().unwrap();
                 if c_w.zone_1_source_chooser.get_active_id().unwrap() != zone_1_source_id {
                     c_w.zone_1_source_chooser.set_active_id(Some(&zone_1_source_id));
                 }
@@ -265,6 +307,10 @@ impl ControlWindow {
                 if c_w.zone_1_volume_chooser.get_value() != zone_1_volume {
                     c_w.zone_1_volume_chooser.set_value(zone_1_volume);
                 };
+                let zone_1_mute: MuteState = c_w.zone_1_mute_display.get_text().unwrap().as_str().into();
+                if MuteState::from(c_w.zone_1_mute_chooser.get_active()) != zone_1_mute {
+                    c_w.zone_1_mute_chooser.set_active(bool::from(zone_1_mute));
+                }
                 let zone_2_source_id = c_w.zone_2_source_display.get_text().unwrap().as_str().to_string();
                 if c_w.zone_2_source_chooser.get_active_id().unwrap() != zone_2_source_id {
                     c_w.zone_2_source_chooser.set_active_id(Some(&zone_2_source_id));
@@ -272,7 +318,12 @@ impl ControlWindow {
                 let zone_2_volume = c_w.get_volume_display_value(ZoneNumber::Two) as f64;
                 if c_w.zone_2_volume_chooser.get_value() != zone_2_volume {
                     c_w.zone_2_volume_chooser.set_value(zone_2_volume);
-                };
+                }
+                // TODO This one seems not to be working.
+                let zone_2_mute: MuteState = c_w.zone_2_mute_display.get_text().unwrap().as_str().into();
+                if MuteState::from(c_w.zone_2_mute_chooser.get_active()) != zone_2_mute {
+                    c_w.zone_2_mute_chooser.set_active(bool::from(zone_2_mute));
+                }
                 Continue(true)
             }
         });
@@ -283,8 +334,9 @@ impl ControlWindow {
         self.to_comms_manager.borrow().as_ref().unwrap().clone()
     }
 
-    pub fn set_connect_display(self: &Self, on: bool) {
-        self.connect_display.set_text(if on { "Connected" } else { "Not connected" });
+    pub fn set_connect_display(self: &Self, connected: ConnectedState) {
+        let string_to_set = connected.to_string();
+        self.connect_display.set_text(&string_to_set);
     }
 
     pub fn set_brightness_display(self: &Self, level: Brightness) {
@@ -313,11 +365,11 @@ impl ControlWindow {
         }
     }
 
-    pub fn set_mute_display(self: &Self, zone: ZoneNumber, on_off: bool) {
-        let text = if on_off { "On" } else { "Muted" };
+    pub fn set_mute_display(self: &Self, zone: ZoneNumber, mute: MuteState) {
+        let text = mute.to_string();
         match zone {
-            ZoneNumber::One => self.zone_1_mute_display.set_text(text),
-            ZoneNumber::Two => self.zone_2_mute_display.set_text(text),
+            ZoneNumber::One => self.zone_1_mute_display.set_text(&text),
+            ZoneNumber::Two => self.zone_2_mute_display.set_text(&text),
         }
     }
 
@@ -336,12 +388,8 @@ impl ControlWindow {
         self.radio_data.show();
     }
 
-    pub fn get_connect_display_value(self: &Self) -> bool {
-        match self.connect_display.get_text().unwrap().as_str() {
-            "Connected" => true,
-            "Not connected" => false,
-            x => panic!("Illegal value in connect_display – {}", x),
-        }
+    pub fn get_connect_display_value(self: &Self) -> ConnectedState {
+        self.connect_display.get_text().unwrap().as_str().into()
     }
 
     pub fn get_source_display_value(self: &Self, zone: ZoneNumber) -> Source {
@@ -369,24 +417,19 @@ impl ControlWindow {
         }
     }
 
-    pub fn get_mute_display_value(self: &Self, zone: ZoneNumber) -> bool {
+    pub fn get_mute_display_value(self: &Self, zone: ZoneNumber) -> MuteState {
         match match zone {
             ZoneNumber::One => self.zone_1_mute_display.get_text(),
             ZoneNumber::Two => self.zone_2_mute_display.get_text(),
         } {
-            Some(s) => match s.as_str() {
-                "Muted" => true,
-                "On" => false,
-                x => panic!("Illegal value for muted – {}", x),
-            },
+            Some(s) => s.as_str().into(),
             None => panic!("Could not get UI mute status for zone {:?}", zone),
         }
     }
 
     fn is_connected(self: &Self) -> bool {
-        if self.get_connect_display_value() {
-            true
-        } else {
+        let rc: bool = self.get_connect_display_value().into();
+        if !rc {
             if ! cfg!(test) {
                 let dialogue = gtk::MessageDialog::new(
                     Some(&self.window),
@@ -398,8 +441,8 @@ impl ControlWindow {
                 dialogue.run();
                 dialogue.destroy();
             }
-            false
         }
+        rc
     }
 
     //  Some methods needed for the integration tests.

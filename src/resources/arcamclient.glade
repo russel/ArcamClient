@@ -255,7 +255,7 @@
                           <object class="GtkLabel" id="zone_1_mute_display">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="label" translatable="yes">Muted</property>
+                            <property name="label" translatable="yes">Not muted</property>
                             <property name="justify">right</property>
                           </object>
                           <packing>
@@ -484,7 +484,7 @@
                           <object class="GtkLabel" id="zone_2_mute_display">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="label" translatable="yes">Muted</property>
+                            <property name="label" translatable="yes">Not muted</property>
                             <property name="justify">right</property>
                           </object>
                           <packing>
@@ -539,7 +539,7 @@
                             <property name="can_focus">False</property>
                             <property name="margin_left">10</property>
                             <property name="margin_right">10</property>
-                            <property name="label" translatable="yes">CD</property>
+                            <property name="label" translatable="yes">FollowZone1</property>
                             <property name="justify">center</property>
                           </object>
                           <packing>
@@ -553,7 +553,7 @@
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="halign">end</property>
-                            <property name="active">0</property>
+                            <property name="active_id">FollowZone1</property>
                             <items>
                               <item id="CD" translatable="yes">CD</item>
                               <item id="BD" translatable="yes">BD</item>
@@ -568,6 +568,7 @@
                               <item id="USB" translatable="yes">USB</item>
                               <item id="STB" translatable="yes">STB</item>
                               <item id="GAME" translatable="yes">GAME</item>
+                              <item id="FollowZone1" translatable="yes">FollowZone1</item>
                             </items>
                           </object>
                           <packing>

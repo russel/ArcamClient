@@ -33,7 +33,7 @@ use num_traits::FromPrimitive;
 
 use crate::arcam_protocol::{AnswerCode, Command, ZoneNumber, REQUEST_VALUE, create_request, parse_response};
 use crate::comms_manager;
-use crate::control_window::ControlWindow;
+use crate::control_window::{ControlWindow, ConnectedState};
 
 pub type RequestTuple = (ZoneNumber, Command, Vec<u8>);
 pub type ResponseTuple = (ZoneNumber, Command, AnswerCode, Vec<u8>);
@@ -55,6 +55,7 @@ pub fn connect_to_amp(
 
 /// Terminate the current connection.
 pub fn disconnect_from_amp() {
+    // TODO What to do to disconnect from the amp?
 }
 
 pub fn send_request(sender: &mut Sender<Vec<u8>>, request: &[u8]) {
@@ -116,7 +117,7 @@ fn handle_response(control_window: &Rc<ControlWindow>, zone: ZoneNumber, cc: Com
         },
         Command::RequestMuteStatus => {
             assert_eq!(datum.len(), 1);
-            control_window.set_mute_display(zone, datum[0] == 0);
+            control_window.set_mute_display(zone, FromPrimitive::from_u8(datum[0]).unwrap());
         },
         Command::RequestDABStation => {
             assert_eq!(datum.len(), 16);
@@ -155,7 +156,7 @@ fn handle_response(control_window: &Rc<ControlWindow>, zone: ZoneNumber, cc: Com
         },
         x => eprintln!("functionality::handle_response: failed to deal with command {:?}", x),
     };
-    control_window.set_connect_display(true);
+    control_window.set_connect_display(ConnectedState::Connected);
 }
 
 pub fn try_parse_of_response_data(control_window: &Rc<ControlWindow>, queue: &mut Vec<u8>) -> bool {

@@ -30,9 +30,9 @@ use gtk::prelude::*;
 use futures;
 use futures::StreamExt;
 
-use arcamclient::arcam_protocol::{AnswerCode, Command, ZoneNumber, create_request, Brightness};
+use arcamclient::arcam_protocol::{AnswerCode, Brightness, Command, MuteState, ZoneNumber, create_request};
 use arcamclient::comms_manager;
-use arcamclient::control_window;
+use arcamclient::control_window::{ConnectedState, ControlWindow};
 use arcamclient::functionality;
 
 use start_avr850::PORT_NUMBER;
@@ -41,7 +41,7 @@ use start_avr850::PORT_NUMBER;
 fn system_test_with_mock_amp() {
     let application = gtk::Application::new(Some("uk.org.winder.arcamclient.system_test"), gio::ApplicationFlags::empty()).unwrap();
     application.connect_startup(move |app| {
-        let control_window = control_window::ControlWindow::new(&app, Some(unsafe { PORT_NUMBER }));
+        let control_window = ControlWindow::new(&app, Some(unsafe { PORT_NUMBER }));
 
         control_window.set_address("127.0.0.1");
         control_window.get_connect_chooser().set_active(true);
@@ -51,12 +51,12 @@ fn system_test_with_mock_amp() {
             let c_w = control_window.clone();
             move ||{
 
-                assert!(c_w.get_connect_display_value());
+                assert_eq!(c_w.get_connect_display_value(), ConnectedState::Connected);
                 assert_eq!(c_w.get_brightness_display_value(), Brightness::Level1);
                 assert_eq!(c_w.get_volume_display_value(ZoneNumber::One), 30);
-                assert!(c_w.get_mute_display_value(ZoneNumber::One));
+                assert_eq!(c_w.get_mute_display_value(ZoneNumber::One), MuteState::NotMuted);
                 assert_eq!(c_w.get_volume_display_value(ZoneNumber::Two), 20);
-                assert!(!c_w.get_mute_display_value(ZoneNumber::Two));
+                assert_eq!(c_w.get_mute_display_value(ZoneNumber::Two), MuteState::NotMuted);
 
                 glib::source::timeout_add_seconds_local(1, {
                     let aa = a.clone();
