@@ -33,10 +33,7 @@ use futures::channel::mpsc::Sender;
 use num_derive::FromPrimitive;  // Apparently unused, but it is necessary.
 use num_traits::FromPrimitive;
 
-use crate::arcam_protocol::{
-    AnswerCode, Command, Request, Response, ZoneNumber,
-    REQUEST_VALUE,
-};
+use crate::arcam_protocol::{AnswerCode, Command, RC5Command, Request, Response, Source, ZoneNumber, REQUEST_VALUE, get_rc5command_data};
 use crate::comms_manager;
 use crate::control_window::{ControlWindow, ConnectedState};
 
@@ -71,16 +68,41 @@ pub fn send_request(sender: &mut Sender<Vec<u8>>, request: Vec<u8>) {
     }
 }
 
-pub fn get_source_from_amp(sender: &mut Sender<Vec<u8>>) {
-    let request = Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_VALUE]).unwrap();
-    send_request(sender, request.to_bytes());
-}
-
-
 pub fn get_brightness_from_amp(sender: &mut Sender<Vec<u8>>) {
     let request = Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_VALUE]).unwrap();
     send_request(sender, request.to_bytes());
 }
+
+pub fn get_source_from_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber) {
+    let request = Request::new(zone, Command::RequestCurrentSource, vec![REQUEST_VALUE]).unwrap();
+    send_request(sender, request.to_bytes());
+}
+
+pub fn set_source_on_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber, source: Source) {
+    let rc5_command = match source {
+        Source::FollowZone1 => RC5Command::SetZone2ToFollowZone1,
+        Source::CD => RC5Command::CD,
+        Source::BD => RC5Command::BD,
+        Source::AV => RC5Command::AV,
+        Source::SAT => RC5Command::Sat,
+        Source::PVR => RC5Command::PVR,
+        Source::VCR => RC5Command::VCR,
+        Source::AUX => RC5Command::Aux,
+        Source::DISPLAY => RC5Command::Display,
+        Source::TUNER => RC5Command::Radio,
+        Source::TUNERDAB => RC5Command::Radio,
+        Source::NET => RC5Command::Net,
+        Source::USB => RC5Command::USB,
+        Source::STB => RC5Command::STB,
+        Source::GAME => RC5Command::Game,
+    };
+    let rc5_data = get_rc5command_data(rc5_command);
+    let data = vec![rc5_data.0, rc5_data.1];
+    let request = Request::new(zone, Command::SimulateRC5IRCommand, data).unwrap();
+    send_request(sender, request.to_bytes());
+    get_source_from_amp(sender, zone);
+}
+
 
 pub fn get_mute_from_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber) {
     let request = Request::new(zone, Command::RequestMuteStatus, vec![REQUEST_VALUE]).unwrap();
@@ -110,7 +132,6 @@ pub fn initialise_control_window(sender: &mut Sender<Vec<u8>>) {
     glib::idle_add_local({
         let mut s = sender.clone();
         move || {
-            get_source_from_amp(&mut s);
             get_brightness_from_amp(&mut s);
             Continue(false)
         }
@@ -123,6 +144,7 @@ pub fn initialise_control_window(sender: &mut Sender<Vec<u8>>) {
                 first_run = false;
                 Continue(true)
             } else {
+                get_source_from_amp(&mut s, ZoneNumber::One);
                 get_volume_from_amp(&mut s, ZoneNumber::One);
                 get_mute_from_amp(&mut s, ZoneNumber::One);
                 Continue(false)
@@ -137,6 +159,7 @@ pub fn initialise_control_window(sender: &mut Sender<Vec<u8>>) {
                 first_run = false;
                 Continue(true)
             } else {
+                get_source_from_amp(&mut s, ZoneNumber::Two);
                 get_volume_from_amp(&mut s, ZoneNumber::Two);
                 get_mute_from_amp(&mut s, ZoneNumber::Two);
                 Continue(false)

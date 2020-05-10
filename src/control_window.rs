@@ -260,6 +260,14 @@ impl ControlWindow {
                 }
             }
         });
+        control_window.zone_1_source_chooser.connect_changed({
+            let c_w = control_window.clone();
+            move |cbt| {
+                if c_w.is_connected() {
+                    functionality::set_source_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::One, Source::from(cbt.get_active_id().unwrap().as_ref()));
+                }
+            }
+        });
         control_window.zone_1_volume_chooser.connect_changed({
             let c_w = control_window.clone();
             move |button| {
@@ -273,6 +281,14 @@ impl ControlWindow {
             move |button| {
                 if c_w.is_connected() {
                     functionality::set_mute_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::One, button.get_active())
+                }
+            }
+        });
+        control_window.zone_2_source_chooser.connect_changed({
+            let c_w = control_window.clone();
+            move |cbt| {
+                if c_w.is_connected() {
+                    functionality::set_source_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::Two, Source::from(cbt.get_active_id().unwrap().as_ref()));
                 }
             }
         });
