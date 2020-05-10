@@ -66,7 +66,6 @@ use num_traits::FromPrimitive;
 use arcamclient::arcam_protocol::{
     AnswerCode, Brightness, Command, MuteState, RC5Command, Request, Response, Source, VideoSource, ZoneNumber,
     PACKET_START, REQUEST_VALUE,
-    get_rc5command_data,
 };
 
 /// Zone state for an AVR. An AVR comprises a number of zones.

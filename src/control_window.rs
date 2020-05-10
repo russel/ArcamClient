@@ -292,41 +292,6 @@ impl ControlWindow {
                 }
             }
         });
-        glib::source::timeout_add_seconds_local(2, {
-            let c_w = control_window.clone() ;
-            move || {
-                let brightness_id = c_w.brightness_display.get_text().unwrap();
-                if c_w.brightness_chooser.get_active_id().unwrap() != brightness_id {
-                    c_w.brightness_chooser.set_active_id(Some(&brightness_id));
-                }
-                let zone_1_source_id = c_w.zone_1_source_display.get_text().unwrap();
-                if c_w.zone_1_source_chooser.get_active_id().unwrap() != zone_1_source_id {
-                    c_w.zone_1_source_chooser.set_active_id(Some(&zone_1_source_id));
-                }
-                let zone_1_volume = c_w.get_volume_display_value(ZoneNumber::One) as f64;
-                if c_w.zone_1_volume_chooser.get_value() != zone_1_volume {
-                    c_w.zone_1_volume_chooser.set_value(zone_1_volume);
-                };
-                let zone_1_mute: MuteState = c_w.zone_1_mute_display.get_text().unwrap().as_str().into();
-                if MuteState::from(c_w.zone_1_mute_chooser.get_active()) != zone_1_mute {
-                    c_w.zone_1_mute_chooser.set_active(bool::from(zone_1_mute));
-                }
-                let zone_2_source_id = c_w.zone_2_source_display.get_text().unwrap().as_str().to_string();
-                if c_w.zone_2_source_chooser.get_active_id().unwrap() != zone_2_source_id {
-                    c_w.zone_2_source_chooser.set_active_id(Some(&zone_2_source_id));
-                }
-                let zone_2_volume = c_w.get_volume_display_value(ZoneNumber::Two) as f64;
-                if c_w.zone_2_volume_chooser.get_value() != zone_2_volume {
-                    c_w.zone_2_volume_chooser.set_value(zone_2_volume);
-                }
-                // TODO This one seems not to be working.
-                let zone_2_mute: MuteState = c_w.zone_2_mute_display.get_text().unwrap().as_str().into();
-                if MuteState::from(c_w.zone_2_mute_chooser.get_active()) != zone_2_mute {
-                    c_w.zone_2_mute_chooser.set_active(bool::from(zone_2_mute));
-                }
-                Continue(true)
-            }
-        });
         control_window
     }
 
@@ -337,12 +302,18 @@ impl ControlWindow {
     pub fn set_connect_display(self: &Self, connected: ConnectedState) {
         let string_to_set = connected.to_string();
         self.connect_display.set_text(&string_to_set);
+        let value: bool = connected.into();
+        if self.connect_chooser.get_active() != value {
+            self.connect_chooser.set_active(value);
+        }
     }
 
     pub fn set_brightness_display(self: &Self, level: Brightness) {
         let brightness_id= format!("{:?}", level);
         self.brightness_display.set_text(&brightness_id);
-        self.brightness_chooser.set_active_id(Some(&format!("{:?}", level)));
+        if self.brightness_chooser.get_active_id().unwrap() != brightness_id {
+            self.brightness_chooser.set_active_id(Some(&brightness_id));
+        }
     }
 
     pub fn set_source_display(self: &Self, zone: ZoneNumber, source: Source) {
@@ -350,28 +321,40 @@ impl ControlWindow {
             ZoneNumber::One => (&self.zone_1_source_display, &self.zone_1_source_chooser),
             ZoneNumber::Two => (&self.zone_2_source_display, &self.zone_2_source_chooser),
         };
-        source_display.set_text(&format!("{:?}", source));
+        let source_id = format!("{:?}", source);
+        source_display.set_text(&source_id);
         if source == Source::TUNER { self.radio_data.show(); }
         else { self.radio_data.hide(); }
-        source_chooser.set_active_id(Some(&format!("{:?}", source)));
+        if source_chooser.get_active_id().unwrap() != source_id {
+            source_chooser.set_active_id(Some(&source_id));
+        }
     }
 
     pub fn set_volume_display(self: &Self, zone: ZoneNumber, volume: f64) {
         assert!(volume < 100.0);
+        let (volume_display, volume_chooser) = match zone {
+            ZoneNumber::One => (&self.zone_1_volume_display, &self.zone_1_volume_chooser),
+            ZoneNumber::Two => (&self.zone_2_volume_display, &self.zone_2_volume_chooser),
+        };
         let text = volume.to_string();
-        match zone {
-            ZoneNumber::One => self.zone_1_volume_display.set_text(&text),
-            ZoneNumber::Two => self.zone_2_volume_display.set_text(&text),
+        volume_display.set_text(&text);
+        if volume_chooser.get_value() != volume {
+            volume_chooser.set_value(volume);
         }
     }
 
     pub fn set_mute_display(self: &Self, zone: ZoneNumber, mute: MuteState) {
         let text = mute.to_string();
-        match zone {
-            ZoneNumber::One => self.zone_1_mute_display.set_text(&text),
-            ZoneNumber::Two => self.zone_2_mute_display.set_text(&text),
+        let (mute_display, mute_chooser) = match zone {
+            ZoneNumber::One => (&self.zone_1_mute_display, &self.zone_1_mute_chooser),
+            ZoneNumber::Two => (&self.zone_2_mute_display, &self.zone_2_mute_chooser),
+        };
+        mute_display.set_text(&text);
+        let value: bool = mute.into();
+        if mute_chooser.get_active() != value {
+            mute_chooser.set_active(value);
         }
-    }
+   }
 
     pub fn set_radio_station_display(self: &Self, station: &str) {
         self.radio_station_display.set_text(station);

@@ -105,7 +105,8 @@ pub fn set_volume_on_amp(sender: &mut Sender<Vec<u8>>, zone:ZoneNumber, value: f
 
 pub fn initialise_control_window(sender: &mut Sender<Vec<u8>>) {
     // Experimental evidence indicates that a real AVR 850 cannot deal with six requests
-    // being thrown atr it quickly. Do them two at a time.
+    // being thrown at it quickly. It seems that it can cope with sending two at a time
+    // with a second gap.
     glib::idle_add_local({
         let mut s = sender.clone();
         move || {
@@ -114,7 +115,7 @@ pub fn initialise_control_window(sender: &mut Sender<Vec<u8>>) {
             Continue(false)
         }
     });
-    glib::timeout_add_seconds_local(2, {
+    glib::timeout_add_seconds_local(1, {
         let mut s = sender.clone();
         let mut first_run = true;
         move || {
@@ -128,7 +129,7 @@ pub fn initialise_control_window(sender: &mut Sender<Vec<u8>>) {
             }
         }
     });
-    glib::timeout_add_seconds_local(4, {
+    glib::timeout_add_seconds_local(2, {
         let mut s = sender.clone();
         let mut first_run = true;
         move || {

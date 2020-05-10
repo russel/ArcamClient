@@ -46,7 +46,7 @@ fn system_test_with_mock_amp() {
         control_window.set_address("127.0.0.1");
         control_window.get_connect_chooser().set_active(true);
 
-        glib::source::timeout_add_seconds_local(5, {
+        glib::source::timeout_add_seconds_local(3, {
             let a = app.clone();
             let c_w = control_window.clone();
             let mut first_run = true;
