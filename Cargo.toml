@@ -11,6 +11,7 @@ edition = "2018"
 
 [dependencies]
 ctor = "*"
+env_logger = "*"
 futures = "*"
 futures-util = "*"
 #gdk = "*"
@@ -19,6 +20,7 @@ gio = "*"
 glib = {version="*", features=["v2_48"]}
 gtk = {version="*", features=["v3_18"]}
 lazy_static = "*"
+log = "*"
 num-traits = "*"
 num-derive = "*"
 pin-utils = "*"
