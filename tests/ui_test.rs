@@ -29,10 +29,7 @@ use gtk::prelude::*;
 use futures;
 use futures::StreamExt;
 
-use arcamclient::arcam_protocol::{
-    AnswerCode, Command, ZoneNumber,
-    create_request,
-};
+use arcamclient::arcam_protocol::{AnswerCode, Command, Request, ZoneNumber};
 use arcamclient::comms_manager;
 use arcamclient::control_window;
 use arcamclient::functionality;
@@ -66,7 +63,7 @@ fn ui_test() {
 
                 eprintln!("ui_test::ui_test: await packet on queue of packet to comms_manager.");
                 match rx_queue.next().await {
-                    Some(s) => assert_eq!(s, create_request(ZoneNumber::One, Command::SetRequestVolume, &[0x14]).unwrap()),
+                    Some(s) => assert_eq!(s, Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![0x14]).unwrap().to_bytes()),
                     None => assert!(false, "Failed to get a value from the response queue."),
                 };
 

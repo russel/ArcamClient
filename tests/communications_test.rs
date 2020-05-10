@@ -36,9 +36,8 @@ use futures::StreamExt;
 //use futures_util::io::AsyncReadExt;
 
 use arcamclient::arcam_protocol::{
-    AnswerCode,Command, Source, ZoneNumber,
+    AnswerCode, Brightness, Command, Request, Response, Source, ZoneNumber,
     REQUEST_VALUE,
-    create_request, create_response, parse_response
 };
 use arcamclient::comms_manager;
 use arcamclient::control_window::ControlWindow;
@@ -82,41 +81,41 @@ fn communications_test() {
 
                 send_request(
                     &mut sender,
-                    &create_request(ZoneNumber::One, Command::DisplayBrightness, &[REQUEST_VALUE]).unwrap()
+                    Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_VALUE]).unwrap().to_bytes()
                 );
                 match rx_queue.next().await {
-                    Some(s) => assert_eq!(s, create_response(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, &[0x01]).unwrap()),
+                    Some(s) => assert_eq!(s, Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![Brightness::Level2 as u8]).unwrap().to_bytes()),
                     None => assert!(false, "Failed to get a value from the response queue."),
                 };
 
                 send_request(
                     &mut sender,
-                    &create_request(ZoneNumber::One, Command::SetRequestVolume, &[0x14]).unwrap()
+                    Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![0x14]).unwrap().to_bytes()
                 );
                 match rx_queue.next().await {
-                    Some(s) => assert_eq!(s, create_response(ZoneNumber::One, Command::SetRequestVolume, AnswerCode::StatusUpdate, &[0x14]).unwrap()),
+                    Some(s) => assert_eq!(s, Response::new(ZoneNumber::One, Command::SetRequestVolume, AnswerCode::StatusUpdate, vec![0x14]).unwrap().to_bytes()),
                     None => assert!(false, "Failed to get a value from the response queue."),
                 };
 
                 send_request(
                     &mut sender,
-                    &create_request(ZoneNumber::One, Command::RequestCurrentSource, &[REQUEST_VALUE]).unwrap()
+                    Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_VALUE]).unwrap().to_bytes()
                 );
                 match rx_queue.next().await {
-                    Some(s) => assert_eq!(s, create_response(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, &[Source::TUNER as u8]).unwrap()),
+                    Some(s) => assert_eq!(s, Response::new(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::TUNER as u8]).unwrap().to_bytes()),
                     None => assert!(false, "Failed to get a value from the response queue."),
                 };
 
                 // Send a multi-packet request.
-                let mut buffer = create_request(ZoneNumber::One, Command::DisplayBrightness, &[REQUEST_VALUE]).unwrap();
-                buffer.append(&mut create_request(ZoneNumber::One, Command::RequestCurrentSource, &[REQUEST_VALUE]).unwrap());
-                send_request(&mut sender, &buffer);
+                let mut buffer = Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_VALUE]).unwrap().to_bytes();
+                buffer.append(&mut Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_VALUE]).unwrap().to_bytes());
+                send_request(&mut sender, buffer);
                 match rx_queue.next().await {
-                    Some(s) => assert_eq!(s, create_response(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, &[0x01]).unwrap()),
+                    Some(s) => assert_eq!(s, Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![0x01]).unwrap().to_bytes()),
                     None => assert!(false, "Failed to get a value from the response queue."),
                 };
                 match rx_queue.next().await {
-                    Some(s) => assert_eq!(s, create_response(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, &[Source::TUNER as u8]).unwrap()),
+                    Some(s) => assert_eq!(s, Response::new(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::TUNER as u8]).unwrap().to_bytes()),
                     None => assert!(false, "Failed to get a value from the response queue."),
                 };
 

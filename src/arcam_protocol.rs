@@ -645,129 +645,165 @@ pub static PACKET_END: u8 = 0x0d;
 /// The values used to represent the question of which value is currently set.
 pub static REQUEST_VALUE: u8 = 0xf0;
 
-/**
-Construct a byte sequence representing a valid request to the AVR.
-
-All requests are structured:
-
-- St (Start transmission): PACKET_START ‘!’
-- Zn (Zone number): 0x1, 0x2 for the zone number
-- Cc (Command code): the code for the command
-- Dl (Data Length): the number of data items following this item, excluding the ETR
-- Data: the parameters for the response of length n. n is limited to 255
-- Et (End transmission): PACKET_END
-*/
-pub fn create_request(zone: ZoneNumber, cc: Command, args: &[u8]) -> Result<Vec<u8>, &'static str> {
-    let dl = args.len();
-    if dl >= 256 { return Err("args array length not right."); }
-    let mut result = vec![PACKET_START, zone as u8, cc as u8, dl as u8];
-    result.extend(args);
-    result.push(PACKET_END);
-    Ok(result)
+/// Represent a request to the AVR.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Request {
+    pub zone: ZoneNumber,
+    pub cc: Command,
+    pub data: Vec<u8>,
 }
 
-/**
-Construct a byte sequence representing a valid response from the AVR.
+impl Request {
+    /**
+    Create a new request.
 
-All responses are structured:
+    The data value is restricted to being at most 255 bytes long.
+     */
+    pub fn new(zone: ZoneNumber, cc: Command, data: Vec<u8>) -> Result<Self, &'static str> {
+        if data.len() > 255 { Err("Cannot have more than 255 bytes as data.") }
+        else { Ok(Self {zone, cc, data}) }
+    }
 
-- St (Start transmission): PACKET_START ‘!’
-- Zn (Zone number): 0x1, 0x2 for the zone number
-- Cc (Command code): the code for the command
-- Ac (Answer code): the answer code for the request
-- Dl (Data Length): the number of data items following this item, excluding the ETR
-- Data: the parameters for the response of length n. n is limited to 255
-- Et (End transmission): PACKET_END
-*/
-pub fn create_response(zone: ZoneNumber, cc: Command, ac: AnswerCode, args: &[u8]) -> Result<Vec<u8>, &'static str> {
-    let dl = args.len();
-    if dl >= 256 { return Err("args array length not right."); }
-    let mut result = vec![PACKET_START, zone as u8, cc as u8, ac as u8, dl as u8];
-    result.extend(args);
-    result.push(PACKET_END);
-    Ok(result)
+    /**
+    Construct a byte sequence representing a valid request to the AVR.
+
+    All requests are structured:
+
+    - St (Start transmission): PACKET_START ‘!’
+    - Zn (Zone number): 0x1, 0x2 for the zone number
+    - Cc (Command code): the code for the command
+    - Dl (Data Length): the number of data items following this item, excluding the ETR
+    - Data: the parameters for the response of length n. n is limited to 255
+    - Et (End transmission): PACKET_END
+    */
+    pub fn to_bytes(self: &Self) -> Vec<u8> {
+        let dl = self.data.len();
+        if dl >= 256 { panic!("args array length not right."); }
+        let mut result = vec![PACKET_START, self.zone as u8, self.cc as u8, dl as u8];
+        result.extend(self.data.iter());
+        result.push(PACKET_END);
+        result
+    }
+
+    /**
+     Parse the bytes to create a tuple representing an Arcam request.
+
+    All requests are structured:
+
+    - St (Start transmission): PACKET_START ‘!’
+    - Zn (Zone number): 0x1, 0x2 for the zone number
+    - Cc (Command code): the code for the command
+    - Dl (Data Length): the number of data items following this item, excluding the ETR
+    - Data: the parameters for the response of length n. n is limited to 255
+    - Et (End transmission): PACKET_END
+    */
+    pub fn parse_bytes(packet: &[u8]) -> Result<(Self, usize), &str> {
+        let packet_length = packet.len();
+        if packet_length < 5 { return Err("Insufficient bytes to form a packet."); }
+        let mut index = 0;
+        if packet[index] != PACKET_START { return Err("First byte is not the start of packet marker."); }
+        index += 1;
+        if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+        let zone = FromPrimitive::from_u8(packet[index]).unwrap();
+        index += 1;
+        if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+        let cc = FromPrimitive::from_u8(packet[index]).unwrap();
+        index += 1;
+        if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+        let dl = packet[index] as usize;
+        index += 1;
+        if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+        let end_index = index + dl;
+        if end_index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+        let data = packet[index..end_index].to_vec();
+        assert_eq!(data.len(), dl);
+        index = end_index;
+        if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+        if packet[index] != PACKET_END { return Err("Final byte is not the end of packet marker."); }
+        index += 1;
+        Ok((Self{zone, cc, data}, index))
+    }
 }
 
-/**
- Parse the bytes to create a tuple representing an Arcam request.
-
-All requests are structured:
-
-- St (Start transmission): PACKET_START ‘!’
-- Zn (Zone number): 0x1, 0x2 for the zone number
-- Cc (Command code): the code for the command
-- Dl (Data Length): the number of data items following this item, excluding the ETR
-- Data: the parameters for the response of length n. n is limited to 255
-- Et (End transmission): PACKET_END
-*/
-pub fn parse_request(packet: &[u8]) -> Result<(ZoneNumber, Command, Vec<u8>, usize), &'static str> {
-    let packet_length = packet.len();
-    if packet_length < 5 { return Err("Insufficient bytes to form a packet."); }
-    let mut index = 0;
-    if packet[index] != PACKET_START { return Err("First byte is not the start of packet marker."); }
-    index += 1;
-    if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
-    let zone = FromPrimitive::from_u8(packet[index]).unwrap();
-    index += 1;
-    if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
-    let cc = FromPrimitive::from_u8(packet[index]).unwrap();
-    index += 1;
-    if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
-    let dl = packet[index] as usize;
-    index += 1;
-    if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
-    let end_index = index + dl;
-    if end_index >= packet_length { return Err("Insufficient bytes to form a packet."); }
-    let data = &packet[index..end_index];
-    assert_eq!(data.len(), dl);
-    index = end_index;
-    if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
-    if packet[index] != PACKET_END { return Err("Final byte is not the end of packet marker."); }
-    index += 1;
-    Ok((zone, cc, Vec::from(data), index))
+///Represents a response form the AVR.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Response {
+    pub zone: ZoneNumber,
+    pub cc: Command,
+    pub ac: AnswerCode,
+    pub data: Vec<u8>,
 }
 
-/**
-Parse the bytes to create a tuple representing an Arcam response.
+impl Response {
+    pub fn new(zone: ZoneNumber, cc: Command, ac: AnswerCode, data: Vec<u8>) -> Result<Self, &'static str> {
+        if data.len() > 255 { Err("data is too long for a response.") }
+        else { Ok(Self{zone, cc, ac, data}) }
+    }
 
-All responses are structured;
+    /**
+    Construct a byte sequence representing a valid response from the AVR.
 
-- St (Start transmission): PACKET_START ‘!’
-- Zn (Zone number): 0x1, 0x2 for the zone number
-- Cc (Command code): the code for the command
-- Ac (Answer code): the answer code for the request
-- Dl (Data Length): the number of data items following this item, excluding the ETR
-- Data: the parameters for the response of length n. n is limited to 255
-- Et (End transmission): PACKET_END
-*/
-pub fn parse_response(packet: &[u8]) -> Result<(ZoneNumber, Command, AnswerCode, Vec<u8>, usize), &'static str> {
-    let packet_length = packet.len();
-    if packet_length < 6 { return Err("Insufficient bytes to form a packet."); }
-    let mut index = 0;
-    if packet[index] != PACKET_START { return Err("First byte is not the start of packet marker."); }
-    index += 1;
-    if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
-    let zone = FromPrimitive::from_u8(packet[index]).unwrap();
-    index += 1;
-    if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
-    let cc = FromPrimitive::from_u8(packet[index]).unwrap();
-    index += 1;
-    if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
-    let ac = FromPrimitive::from_u8(packet[index]).unwrap();
-    index += 1;
-    if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
-    let dl = packet[index] as usize;
-    index += 1;
-    if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
-    let end_index = index + dl;
-    if end_index >= packet_length { return Err("Insufficient bytes to form a packet."); }
-    let data = &packet[index..end_index];
-    assert_eq!(data.len(), dl);
-    index = end_index;
-    if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
-    if packet[index] != PACKET_END { return Err("Final byte is not the end of packet marker."); }
-    index += 1;
-    Ok((zone, cc, ac, Vec::from(data), index))
+    All responses are structured:
+
+    - St (Start transmission): PACKET_START ‘!’
+    - Zn (Zone number): 0x1, 0x2 for the zone number
+    - Cc (Command code): the code for the command
+    - Ac (Answer code): the answer code for the request
+    - Dl (Data Length): the number of data items following this item, excluding the ETR
+    - Data: the parameters for the response of length n. n is limited to 255
+    - Et (End transmission): PACKET_END
+    */
+    pub fn to_bytes(self: &Self) -> Vec<u8> {
+        let dl = self.data.len();
+        if dl >= 256 { panic!("data length not right."); }
+        let mut result = vec![PACKET_START, self.zone as u8, self.cc as u8, self.ac as u8, dl as u8];
+        result.extend(self.data.iter());
+        result.push(PACKET_END);
+        result
+    }
+
+    /**
+    Parse the bytes to create a tuple representing an Arcam response.
+
+    All responses are structured;
+
+    - St (Start transmission): PACKET_START ‘!’
+    - Zn (Zone number): 0x1, 0x2 for the zone number
+    - Cc (Command code): the code for the command
+    - Ac (Answer code): the answer code for the request
+    - Dl (Data Length): the number of data items following this item, excluding the ETR
+    - Data: the parameters for the response of length n. n is limited to 255
+    - Et (End transmission): PACKET_END
+    */
+    pub fn parse_bytes(packet: &[u8]) -> Result<(Self, usize), &'static str> {
+        let packet_length = packet.len();
+        if packet_length < 6 { return Err("Insufficient bytes to form a packet."); }
+        let mut index = 0;
+        if packet[index] != PACKET_START { return Err("First byte is not the start of packet marker."); }
+        index += 1;
+        if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+        let zone = FromPrimitive::from_u8(packet[index]).unwrap();
+        index += 1;
+        if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+        let cc = FromPrimitive::from_u8(packet[index]).unwrap();
+        index += 1;
+        if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+        let ac = FromPrimitive::from_u8(packet[index]).unwrap();
+        index += 1;
+        if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+        let dl = packet[index] as usize;
+        index += 1;
+        if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+        let end_index = index + dl;
+        if end_index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+        let data = packet[index..end_index].to_vec();
+        assert_eq!(data.len(), dl);
+        index = end_index;
+        if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
+        if packet[index] != PACKET_END { return Err("Final byte is not the end of packet marker."); }
+        index += 1;
+        Ok((Self{zone, cc, ac, data}, index))
+    }
 }
 
 #[cfg(test)]
@@ -778,54 +814,63 @@ mod tests {
 
     #[test]
     fn create_display_brightness_request() {
+        let request = Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_VALUE]).unwrap();
         assert_eq!(
-            create_request(ZoneNumber::One, Command::DisplayBrightness, &mut [REQUEST_VALUE]).unwrap(),
+            request.to_bytes(),
             [PACKET_START, 0x01, 0x01, 0x01, REQUEST_VALUE, PACKET_END]
         );
     }
 
     #[test]
     fn create_get_volume_request() {
+        let request = Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![REQUEST_VALUE]).unwrap();
         assert_eq!(
-            create_request(ZoneNumber::One, Command::SetRequestVolume, &mut [REQUEST_VALUE]).unwrap(),
+            request.to_bytes(),
             [PACKET_START, 0x01, PACKET_END, 0x01, REQUEST_VALUE, PACKET_END]
         );
     }
 
     #[test]
     fn create_set_volume_request() {
+        let request = Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![20]).unwrap();
         assert_eq!(
-            create_request(ZoneNumber::One, Command::SetRequestVolume, &mut [20]).unwrap(),
+            request.to_bytes(),
             [PACKET_START, 0x01, PACKET_END, 0x01, 0x14, PACKET_END]
         );
     }
 
     #[test]
     fn parse_empty_request_buffer() {
-        if let Err(e) = parse_request(&[]) {
+        if let Err(e) = Request::parse_bytes(&[]) {
             assert_eq!(e, "Insufficient bytes to form a packet.");
         };
     }
 
     #[test]
     fn parse_request_buffer_with_incorrect_start_marker() {
-        if let Err(e) = parse_request(&[21, 0, 0, 0, 0, 0]) {
+        if let Err(e) = Request::parse_bytes(&[21, 0, 0, 0, 0, 0]) {
             assert_eq!(e, "First byte is not the start of packet marker.");
         };
     }
 
     #[test]
     fn parse_valid_set_volume_request() {
-        let mut request = create_request(ZoneNumber::One, Command::SetRequestVolume, &mut [20]).unwrap();
-        assert_eq!(parse_request(&mut request).unwrap(), (ZoneNumber::One, Command::SetRequestVolume, vec![0x14], 6));
+        let mut request = Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![20]).unwrap();
+        assert_eq!(Request::parse_bytes(&request.to_bytes()).unwrap(), (request, 6));
     }
 
     #[test]
     fn parse_buffer_with_multiple_request_packets() {
-        let input = [33, 1, 29, 1, 240, 13, 33, 1, 1, 1, 240, 13, 33, 1, 13, 1, 30, 13];
+        let r1 = Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_VALUE]).unwrap();
+        let r2 = Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_VALUE]).unwrap();
+        let r3 = Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![30u8]).unwrap();
+        let mut input = r1.to_bytes();
+        input.append(&mut r2.to_bytes());
+        input.append(&mut r3.to_bytes());
+        assert_eq!(input, vec![33, 1, 29, 1, 240, 13, 33, 1, 1, 1, 240, 13, 33, 1, 13, 1, 30, 13]);
         assert_eq!(
-            parse_request(&input).unwrap(),
-            (ZoneNumber::One, Command::RequestCurrentSource, vec![240u8], 6)
+            Request::parse_bytes(&input).unwrap(),
+            (r1, 6)
         );
     }
 
@@ -850,46 +895,53 @@ mod tests {
 
     #[test]
     fn data_length_must_be_less_than_256() {
-        assert!(create_request(ZoneNumber::One, Command::Power, &[0u8; 300]) .is_err());
+        assert!(Request::new(ZoneNumber::One, Command::Power, vec![0u8; 300]).is_err());
     }
 
     #[test]
     fn create_display_brightness_response() {
+        let response = Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![0x01]).unwrap();
         assert_eq!(
-            create_response(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, &[0x01]).unwrap(),
+            response.to_bytes(),
             [PACKET_START, 0x01, 0x01, 0x00, 0x01, 0x01, PACKET_END]
         );
     }
 
     #[test]
     fn parse_empty_response_buffer() {
-        if let Err(e) = parse_response(&[]) {
+        if let Err(e) = Response::parse_bytes(&[]) {
             assert_eq!(e, "Insufficient bytes to form a packet.");
         };
     }
 
     #[test]
     fn parse_response_buffer_with_incorrect_start_marker() {
-        if let Err(e) = parse_request(&[21, 0, 0, 0, 0, 0]) {
+        if let Err(e) = Response::parse_bytes(&[21, 0, 0, 0, 0, 0]) {
             assert_eq!(e, "First byte is not the start of packet marker.");
         };
     }
 
     #[test]
     fn parse_valid_display_brightness_response() {
-        let response = create_response(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, &[0x01]).unwrap();
+        let response = Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![0x01]).unwrap();
         assert_eq!(
-            parse_response(&response).unwrap(),
-            (ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![0x01], 7)
+            Response::parse_bytes(&response.to_bytes()).unwrap(),
+            (response, 7)
         );
     }
 
     #[test]
     fn parse_buffer_with_multiple_response_packets() {
-        let input = [33, 1, 29, 0, 1, 11, 13, 33, 1, 1, 0, 1, 1, 13, 33, 1, 13, 0, 1, 30, 13];
+        let r1 = Response::new(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![11u8]).unwrap();
+        let r2 = Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![1u8]).unwrap();
+        let r3 = Response::new(ZoneNumber::One, Command::SetRequestVolume, AnswerCode::StatusUpdate, vec![30u8]).unwrap();
+        let mut input = r1.to_bytes();
+        input.append(&mut r2.to_bytes());
+        input.append(&mut r3.to_bytes());
+        assert_eq!(input, vec![33, 1, 29, 0, 1, 11, 13, 33, 1, 1, 0, 1, 1, 13, 33, 1, 13, 0, 1, 30, 13]);
         assert_eq!(
-            parse_response(&input).unwrap(),
-            (ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![11u8], 7)
+            Response::parse_bytes(&input).unwrap(),
+            (r1, 7)
         );
     }
 
@@ -897,55 +949,53 @@ mod tests {
 
     #[test]
     fn create_station_name_response() {
+        let response = Response::new(ZoneNumber::One, Command::RequestDABStation, AnswerCode::StatusUpdate, "Smooth Country  ".as_bytes().to_vec()).unwrap();
         assert_eq!(
-            create_response(ZoneNumber::One, Command::RequestDABStation, AnswerCode::StatusUpdate, "Smooth Country  ".as_bytes()).unwrap(),
+            response.to_bytes(),
             [33, 1, 24, 0, 16, 83, 109, 111, 111, 116, 104, 32, 67, 111, 117, 110, 116, 114, 121, 32, 32, 13]
         )
     }
 
     #[test]
     fn parse_station_name_response() {
-        assert_eq!(
-            parse_response(&[33, 1, 24, 0, 16, 83, 109, 111, 111, 116, 104, 32, 67, 111, 117, 110, 116, 114, 121, 32, 32, 13]).unwrap(),
-            (ZoneNumber::One, Command::RequestDABStation, AnswerCode::StatusUpdate, "Smooth Country  ".as_bytes().to_vec(), 22)
-        );
+        let input = [33, 1, 24, 0, 16, 83, 109, 111, 111, 116, 104, 32, 67, 111, 117, 110, 116, 114, 121, 32, 32, 13];
+        let response = Response::new(ZoneNumber::One, Command::RequestDABStation, AnswerCode::StatusUpdate, "Smooth Country  ".as_bytes().to_vec()).unwrap();
+        assert_eq!(Response::parse_bytes(&input).unwrap(), (response, 22));
     }
 
     #[test]
     fn create_station_category_response() {
+        let response = Response::new(ZoneNumber::One, Command::ProgrammeTypeCategory, AnswerCode::StatusUpdate, "Country Music   ".as_bytes().to_vec()).unwrap();
         assert_eq!(
-            create_response(ZoneNumber::One, Command::ProgrammeTypeCategory, AnswerCode::StatusUpdate, "Country Music   ".as_bytes()).unwrap(),
+            response.to_bytes(),
             [33, 1, 25, 0, 16, 67, 111, 117, 110, 116, 114, 121, 32, 77, 117, 115, 105, 99, 32, 32, 32, 13]
         );
     }
 
     #[test]
     fn parse_station_category_response() {
-        assert_eq!(
-            parse_response(&[33, 1, 25, 0, 16, 67, 111, 117, 110, 116, 114, 121, 32, 77, 117, 115, 105, 99, 32, 32, 32, 13]).unwrap(),
-            (ZoneNumber::One, Command::ProgrammeTypeCategory, AnswerCode::StatusUpdate, "Country Music   ".as_bytes().to_vec(), 22)
-        );
+        let input = [33, 1, 25, 0, 16, 67, 111, 117, 110, 116, 114, 121, 32, 77, 117, 115, 105, 99, 32, 32, 32, 13];
+        let response = Response::new(ZoneNumber::One, Command::ProgrammeTypeCategory, AnswerCode::StatusUpdate, "Country Music   ".as_bytes().to_vec()).unwrap();
+        assert_eq!(Response::parse_bytes(&input).unwrap(), (response, 22));
     }
 
     #[test]
     fn parse_station_rds_dls() {
-        assert_eq!(
-            // String here is actually "Now on Smooth: Living In A Box with Room In Your Heart"
-            parse_response(&[33, 1, 26, 0, 129, 12, 78, 111, 119, 32, 111, 110, 32, 83, 109, 111, 111, 116, 104, 58,
+        // String here is actually "Now on Smooth: Living In A Box with Room In Your Heart"
+        let input = [33, 1, 26, 0, 129, 12, 78, 111, 119, 32, 111, 110, 32, 83, 109, 111, 111, 116, 104, 58,
                 32, 76, 105, 118, 105, 110, 103, 32, 73, 110, 32, 65, 32, 66, 111, 120, 32, 119, 105, 116, 104, 32, 82,
                 111, 111, 109, 32, 73, 110, 32, 89, 111, 117, 114, 32, 72, 101, 97, 114, 116, 0, 0, 32, 32, 32, 32, 32,
                 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
                 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
-                32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 13]).unwrap(),
-            (ZoneNumber::One, Command::RequestRDSDLSInformation, AnswerCode::StatusUpdate,
-             vec![12, 78, 111, 119, 32, 111, 110, 32, 83, 109, 111, 111, 116, 104, 58,
+                32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 13,];
+        let response = Response::new(ZoneNumber::One, Command::RequestRDSDLSInformation, AnswerCode::StatusUpdate,
+        vec![12, 78, 111, 119, 32, 111, 110, 32, 83, 109, 111, 111, 116, 104, 58,
                   32, 76, 105, 118, 105, 110, 103, 32, 73, 110, 32, 65, 32, 66, 111, 120, 32, 119, 105, 116, 104, 32, 82,
                   111, 111, 109, 32, 73, 110, 32, 89, 111, 117, 114, 32, 72, 101, 97, 114, 116, 0, 0, 32, 32, 32, 32, 32,
                   32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
                   32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
-                  32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,]
-             , 135)
-        );
+                  32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,]).unwrap();
+        assert_eq!(Response::parse_bytes(&input).unwrap(), (response, 135));
     }
 
     #[test]

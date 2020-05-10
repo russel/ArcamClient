@@ -24,7 +24,7 @@ use std::io::{Write, Read};
 use std::net::{SocketAddr, TcpStream};
 use std::str::from_utf8;
 
-use arcamclient::arcam_protocol::{AnswerCode, Command, Source, ZoneNumber, REQUEST_VALUE, create_request, get_rc5command_data, parse_response, RC5Command};
+use arcamclient::arcam_protocol::{AnswerCode, Command, RC5Command, Request, Response, Source, ZoneNumber, REQUEST_VALUE, get_rc5command_data, Brightness};
 
 fn connect_to_mock_avr850() -> TcpStream {
     match TcpStream::connect(SocketAddr::from(([127, 0, 0, 1], unsafe { start_avr850::PORT_NUMBER }))) {
@@ -72,42 +72,45 @@ fn amx_value() {
 #[test]
 fn get_default_brightness() {
     let data = connect_mock_avr850_send_and_receive(
-        &create_request(ZoneNumber::One, Command::DisplayBrightness, &[REQUEST_VALUE]).unwrap()
+        &Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_VALUE]).unwrap().to_bytes()
     );
     assert_eq!(
-        parse_response(&data).unwrap(),
-        (ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![1], 7)
+        Response::parse_bytes(&data).unwrap(),
+        (Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![Brightness::Level2 as u8]).unwrap(), 7)
     );
 }
 
 #[test]
 fn send_multi_packet_message() {
-     let mut send_data = create_request(ZoneNumber::One, Command::DisplayBrightness, &[REQUEST_VALUE]).unwrap();
-    send_data.append(&mut create_request(ZoneNumber::One, Command::RequestCurrentSource, &[REQUEST_VALUE]).unwrap());
-    send_data.append(&mut create_request(ZoneNumber::Two, Command::RequestCurrentSource, &[REQUEST_VALUE]).unwrap());
+    let mut send_data = Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_VALUE]).unwrap().to_bytes();
+    send_data.append(&mut Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_VALUE]).unwrap().to_bytes());
+    send_data.append(&mut Request::new(ZoneNumber::Two, Command::RequestCurrentSource, vec![REQUEST_VALUE]).unwrap().to_bytes());
     let stream = connect_to_mock_avr850();
     send_to_mock_avr850(&stream, &send_data);
     let mut buffer = [0u8; 4096];
     let mut response_count = 0;
     let receive_count = read_from_mock_avr850(&stream, &mut buffer);
     let mut data = buffer[..receive_count].to_owned();
+    let response_1 = Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![Brightness::Level2 as u8]).unwrap();
+    let response_2 = Response::new(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::CD as u8]).unwrap();
+    let response_3 = Response::new(ZoneNumber::Two, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::FollowZone1 as u8]).unwrap();
     assert_eq!(
-        parse_response(&data).unwrap(),
-        (ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![0x01], 7)
+        Response::parse_bytes(&data).unwrap(),
+        (response_1, 7)
     );
     response_count += 1;
     if data.len() > 7 {
         for _ in 0..7 { data.remove(0); }
         assert_eq!(
-            parse_response(&data).unwrap(),
-            (ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::CD as u8], 7)
+            Response::parse_bytes(&data).unwrap(),
+            (response_2.clone(), 7)
         );
         response_count += 1;
         if data.len() > 7 {
             for _ in 0..7 { data.remove(0); }
             assert_eq!(
-                parse_response(&data).unwrap(),
-                (ZoneNumber::Two, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::FollowZone1 as u8], 7)
+                Response::parse_bytes(&data).unwrap(),
+                (response_3.clone(), 7)
             );
             response_count += 1;
         }
@@ -117,15 +120,15 @@ fn send_multi_packet_message() {
         let receive_count = read_from_mock_avr850(&stream, &mut buffer);
         data = buffer[..receive_count].to_owned();
         assert_eq!(
-            parse_response(&data).unwrap(),
-            (ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::CD as u8], 7)
+            Response::parse_bytes(&data).unwrap(),
+            (response_2, 7)
         );
         response_count += 1;
         if data.len() > 7 {
             for _ in 0..7 { data.remove(0); }
             assert_eq!(
-                parse_response(&data).unwrap(),
-                (ZoneNumber::Two, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::FollowZone1 as u8], 7)
+                Response::parse_bytes(&data).unwrap(),
+                (response_3.clone(), 7)
             );
             response_count += 1;
         }
@@ -135,8 +138,8 @@ fn send_multi_packet_message() {
         let receive_count = read_from_mock_avr850(&stream, &mut buffer);
         data = buffer[..receive_count].to_owned();
         assert_eq!(
-            parse_response(&data).unwrap(),
-            (ZoneNumber::Two, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::FollowZone1 as u8], 7)
+            Response::parse_bytes(&data).unwrap(),
+            (response_3, 7)
         );
         response_count += 1;
     }
@@ -146,12 +149,12 @@ fn send_multi_packet_message() {
 #[test]
 fn set_zone_1_source_to_bd() {
     let rc5_data = get_rc5command_data(RC5Command::BD);
-    let data = [rc5_data.0, rc5_data.1];
+    let data = vec![rc5_data.0, rc5_data.1];
     let response_data = connect_mock_avr850_send_and_receive(
-        &create_request(ZoneNumber::One, Command::SimulateRC5IRCommand, &data).unwrap()
+        &Request::new(ZoneNumber::One, Command::SimulateRC5IRCommand, data.clone()).unwrap().to_bytes()
     );
     assert_eq!(
-        parse_response(&response_data).unwrap(),
-        (ZoneNumber::One, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, data.to_vec(), 8)
+        Response::parse_bytes(&response_data).unwrap(),
+        (Response::new(ZoneNumber::One, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, data.clone()).unwrap(), 8)
     );
 }

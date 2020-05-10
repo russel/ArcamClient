@@ -30,7 +30,7 @@ use gtk::prelude::*;
 use futures;
 use futures::StreamExt;
 
-use arcamclient::arcam_protocol::{AnswerCode, Brightness, Command, MuteState, ZoneNumber, create_request};
+use arcamclient::arcam_protocol::{AnswerCode, Brightness, Command, MuteState, ZoneNumber};
 use arcamclient::comms_manager;
 use arcamclient::control_window::{ConnectedState, ControlWindow};
 use arcamclient::functionality;
@@ -46,27 +46,34 @@ fn system_test_with_mock_amp() {
         control_window.set_address("127.0.0.1");
         control_window.get_connect_chooser().set_active(true);
 
-        glib::source::timeout_add_seconds_local(1, {
+        glib::source::timeout_add_seconds_local(5, {
             let a = app.clone();
             let c_w = control_window.clone();
+            let mut first_run = true;
+
             move ||{
 
-                assert_eq!(c_w.get_connect_display_value(), ConnectedState::Connected);
-                assert_eq!(c_w.get_brightness_display_value(), Brightness::Level1);
-                assert_eq!(c_w.get_volume_display_value(ZoneNumber::One), 30);
-                assert_eq!(c_w.get_mute_display_value(ZoneNumber::One), MuteState::NotMuted);
-                assert_eq!(c_w.get_volume_display_value(ZoneNumber::Two), 20);
-                assert_eq!(c_w.get_mute_display_value(ZoneNumber::Two), MuteState::NotMuted);
+                if first_run {
+                    first_run = false;
+                    Continue(true)
+                } else {
 
-                glib::source::timeout_add_seconds_local(1, {
-                    let aa = a.clone();
-                    move || {
-                        aa.quit();
-                        Continue(false)
-                    }
-                });
+                    assert_eq!(c_w.get_connect_display_value(), ConnectedState::Connected);
+                    assert_eq!(c_w.get_brightness_display_value(), Brightness::Level2);
+                    assert_eq!(c_w.get_volume_display_value(ZoneNumber::One), 30);
+                    assert_eq!(c_w.get_mute_display_value(ZoneNumber::One), MuteState::NotMuted);
+                    assert_eq!(c_w.get_volume_display_value(ZoneNumber::Two), 20);
+                    assert_eq!(c_w.get_mute_display_value(ZoneNumber::Two), MuteState::NotMuted);
 
-                Continue(false)
+                    glib::source::timeout_add_seconds_local(1, {
+                        let aa = a.clone();
+                        move || {
+                            aa.quit();
+                            Continue(false)
+                        }
+                    });
+                    Continue(false)
+                }
             }
         });
     });
