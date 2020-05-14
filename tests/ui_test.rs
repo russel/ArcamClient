@@ -56,19 +56,16 @@ fn ui_test() {
             let c_w = control_window.clone();
             async move {
 
-                eprintln!("ui_test::ui_test: set Zone 1 volume");
                 // This should trigger a change to an volume ScrollButton and therefore
                 // send a message to the amp.
                 c_w.set_volume_chooser(ZoneNumber::One, 20.0);
 
-                eprintln!("ui_test::ui_test: await packet on queue of packet to comms_manager.");
                 match rx_queue.next().await {
                     Some(s) => assert_eq!(s, Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![0x14]).unwrap().to_bytes()),
                     None => assert!(false, "Failed to get a value from the response queue."),
                 };
 
-                eprintln!("ui_test::ui_test: set up application termination.");
-                glib::source::timeout_add_seconds_local(1, {
+                glib::idle_add_local({
                     let aa = a.clone();
                     move || {
                         aa.quit();
@@ -79,7 +76,5 @@ fn ui_test() {
         });
     });
     application.connect_activate(|_|{}); // Avoids a warning.
-    eprintln!("ui_test::ui_test: starting the application event loop.");
     application.run(&[]);
-    eprintln!("ui_test::ui_test: the application event loop has terminated.");
 }

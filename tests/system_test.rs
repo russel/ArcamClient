@@ -46,7 +46,8 @@ fn system_test_with_mock_amp() {
         control_window.set_address("127.0.0.1");
         control_window.get_connect_chooser().set_active(true);
 
-        glib::source::timeout_add_local(750, {
+        // Have to wait for long enough for all the activity of initialising to settle.
+        glib::timeout_add_local(650, {
             let a = app.clone();
             let c_w = control_window.clone();
             let mut first_run = true;
@@ -65,7 +66,7 @@ fn system_test_with_mock_amp() {
                     assert_eq!(c_w.get_volume_display_value(ZoneNumber::Two), 20);
                     assert_eq!(c_w.get_mute_display_value(ZoneNumber::Two), MuteState::NotMuted);
 
-                    glib::source::timeout_add_seconds_local(1, {
+                    glib::idle_add_local({
                         let aa = a.clone();
                         move || {
                             aa.quit();
@@ -78,7 +79,5 @@ fn system_test_with_mock_amp() {
         });
     });
     application.connect_activate(|_|{}); // Avoids a warning.
-    eprintln!("ui_test::ui_test: starting the application event loop.");
     application.run(&[]);
-    eprintln!("ui_test::ui_test: the application event loop has terminated.");
 }

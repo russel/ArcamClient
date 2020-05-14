@@ -51,11 +51,9 @@ fn communications_test() {
     let application = gtk::Application::new(Some("uk.org.winder.arcamclient.communications_test"), gio::ApplicationFlags::empty()).unwrap();
     application.connect_startup(move |app| {
         // Set up connection to the mock AVR850 process.
-        eprintln!("communications_test::communications_test: making connection to {}", unsafe { PORT_NUMBER });
         let (mut tx_queue, mut rx_queue) = futures::channel::mpsc::channel(10);
         let (tx_from_comms_manager, rx_from_comms_manager) = glib::MainContext::channel(glib::source::PRIORITY_DEFAULT);
         rx_from_comms_manager.attach(None, move |datum| {
-            eprintln!("communications_test::communications_test: got a response {:?}.", datum);
             match tx_queue.try_send(datum) {
                 Ok(_) => {},
                 Err(e) => assert!(false, e),
@@ -63,10 +61,7 @@ fn communications_test() {
             Continue(true)
         });
         let mut sender = match comms_manager::connect_to_amp( &tx_from_comms_manager, "127.0.0.1", unsafe { PORT_NUMBER }) {
-            Ok(s) => {
-                eprintln!("communications_test::communications_test: connected to 127.0.0.1:{:?}.", unsafe{ PORT_NUMBER });
-                s
-            },
+            Ok(s) => s,
             Err(e) => panic!("~~~~ communications_test: failed to connect to the mock amp."),
         };
         // Run the tests.
@@ -77,7 +72,6 @@ fn communications_test() {
         glib::MainContext::default().spawn_local({
             let a = app.clone();
             async move {
-                eprintln!("communications_test::communications_test: running the test code.");
 
                 send_request(
                     &mut sender,
@@ -119,9 +113,7 @@ fn communications_test() {
                     None => assert!(false, "Failed to get a value from the response queue."),
                 };
 
-                // Terminate the application once all tests are run.
-                eprintln!("communications_test::communications_test: send termination signal.");
-                glib::source::timeout_add_seconds_local(1, {
+                glib::idle_add_local({
                     let aa = a.clone();
                     move ||{
                         aa.quit();
@@ -132,7 +124,5 @@ fn communications_test() {
         });
     });
     application.connect_activate(|_|{}); // Avoids a warning.
-    eprintln!("communications_test::communications_test: starting the application event loop.");
     application.run(&[]);
-    eprintln!("communications_test::communications_test: the application event loop has terminated.");
 }
