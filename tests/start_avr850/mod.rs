@@ -34,7 +34,6 @@ fn start_mock_avr850() {
     let mut rng = rand::thread_rng();
     unsafe {
         PORT_NUMBER = rng.gen_range(50001, 65535);
-        eprintln!("==== start_mockavr850: starting the process using port {}", PORT_NUMBER);
     }
     match process::Command::new("cargo")
         .args(&["run", "--bin", "mock_avr850", unsafe { &PORT_NUMBER.to_string() }])
@@ -43,7 +42,6 @@ fn start_mock_avr850() {
             unsafe { MOCK_AVR850 = Some(m); }
             // The server needs a moment to settle before things will work.
             thread::sleep(time::Duration::from_millis(500));
-            eprintln!("==== start_mockavr850: started the process using port {}", unsafe { PORT_NUMBER });
         },
         Err(e) => panic!("====  start_mockavr850: failed to start MOCK_AVR850 – {}", e),
     }
@@ -51,7 +49,6 @@ fn start_mock_avr850() {
 
 #[dtor]
 fn terminate_mock_avr850() {
-    // Do not do IO here to avoid SIGILL  eprintln!("start_mockavr850: terminating the process.");
     unsafe {
         match &mut MOCK_AVR850 {
             Some(m) => {
@@ -59,10 +56,10 @@ fn terminate_mock_avr850() {
                     Ok(_) => {
                         match m.wait() {
                             Ok(_) => {},
-                            Err(e) => eprintln!("====  start_avr850: failed to wait on mock_avr850 process: {:?}", e),
+                            Err(e) => panic!("====  start_avr850: failed to wait on mock_avr850 process: {:?}", e),
                         }
                     },
-                    Err(e) => eprintln!("====  start_avr850: failed to terminate mock_avr850 process: {:?}", e),
+                    Err(e) => panic!("====  start_avr850: failed to terminate mock_avr850 process: {:?}", e),
                 }
             },
             None => {},
