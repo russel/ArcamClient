@@ -69,8 +69,8 @@ pub enum Command {
     RequestMenuStatus = 0x14,
     RequestTunerPreset = 0x15,
     Tune = 0x16,
-    RequestDABStation = 0x18,
-    ProgrammeTypeCategory = 0x19,
+    RequestDABStation = 0x18, // Was called RequestDABSiriusStation for AVR600
+    ProgrammeTypeCategory = 0x19, // Was called RadioProgrammeTypeCategory for AVR600
     RequestRDSDLSInformation = 0x1A,
     RequestPresetDetails = 0x1B,
     NetworkPlaybackStatus = 0x1C,
@@ -817,7 +817,7 @@ mod tests {
         let request = Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_VALUE]).unwrap();
         assert_eq!(
             request.to_bytes(),
-            [PACKET_START, 0x01, 0x01, 0x01, REQUEST_VALUE, PACKET_END]
+            [PACKET_START, ZoneNumber::One as u8, Command::DisplayBrightness as u8, 0x01, REQUEST_VALUE, PACKET_END]
         );
     }
 
@@ -826,7 +826,7 @@ mod tests {
         let request = Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![REQUEST_VALUE]).unwrap();
         assert_eq!(
             request.to_bytes(),
-            [PACKET_START, 0x01, PACKET_END, 0x01, REQUEST_VALUE, PACKET_END]
+            [PACKET_START, ZoneNumber::One as u8, Command::SetRequestVolume as u8, 0x01, REQUEST_VALUE, PACKET_END]
         );
     }
 
@@ -835,7 +835,7 @@ mod tests {
         let request = Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![20]).unwrap();
         assert_eq!(
             request.to_bytes(),
-            [PACKET_START, 0x01, PACKET_END, 0x01, 0x14, PACKET_END]
+            [PACKET_START, ZoneNumber::One as u8, Command::SetRequestVolume as u8, 0x01, 0x14, PACKET_END]
         );
     }
 
@@ -867,7 +867,11 @@ mod tests {
         let mut input = r1.to_bytes();
         input.append(&mut r2.to_bytes());
         input.append(&mut r3.to_bytes());
-        assert_eq!(input, vec![33, 1, 29, 1, 240, 13, 33, 1, 1, 1, 240, 13, 33, 1, 13, 1, 30, 13]);
+        assert_eq!(input, vec![
+            PACKET_START, ZoneNumber::One as u8, Command::RequestCurrentSource as u8, 1, REQUEST_VALUE, PACKET_END,
+            PACKET_START, ZoneNumber::One as u8, Command::DisplayBrightness as u8, 1, REQUEST_VALUE, PACKET_END,
+            PACKET_START, ZoneNumber::One as u8, Command::SetRequestVolume as u8, 1, 30, PACKET_END,
+        ]);
         assert_eq!(
             Request::parse_bytes(&input).unwrap(),
             (r1, 6)
@@ -900,10 +904,10 @@ mod tests {
 
     #[test]
     fn create_display_brightness_response() {
-        let response = Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![0x01]).unwrap();
+        let response = Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![Brightness::Level1 as u8]).unwrap();
         assert_eq!(
             response.to_bytes(),
-            [PACKET_START, 0x01, 0x01, 0x00, 0x01, 0x01, PACKET_END]
+            [PACKET_START, ZoneNumber::One as u8, Command::DisplayBrightness as u8, AnswerCode::StatusUpdate as u8, 0x01, Brightness::Level1 as u8, PACKET_END]
         );
     }
 
@@ -932,13 +936,17 @@ mod tests {
 
     #[test]
     fn parse_buffer_with_multiple_response_packets() {
-        let r1 = Response::new(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![11u8]).unwrap();
-        let r2 = Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![1u8]).unwrap();
+        let r1 = Response::new(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![REQUEST_VALUE]).unwrap();
+        let r2 = Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![REQUEST_VALUE]).unwrap();
         let r3 = Response::new(ZoneNumber::One, Command::SetRequestVolume, AnswerCode::StatusUpdate, vec![30u8]).unwrap();
         let mut input = r1.to_bytes();
         input.append(&mut r2.to_bytes());
         input.append(&mut r3.to_bytes());
-        assert_eq!(input, vec![33, 1, 29, 0, 1, 11, 13, 33, 1, 1, 0, 1, 1, 13, 33, 1, 13, 0, 1, 30, 13]);
+        assert_eq!(input, vec![
+            PACKET_START, ZoneNumber::One as u8, Command::RequestCurrentSource as u8, AnswerCode::StatusUpdate as u8, 1, REQUEST_VALUE, PACKET_END,
+            PACKET_START, ZoneNumber::One as u8, Command::DisplayBrightness as u8, AnswerCode::StatusUpdate as u8, 1, REQUEST_VALUE, PACKET_END,
+            PACKET_START, ZoneNumber::One as u8, Command::SetRequestVolume as u8, AnswerCode::StatusUpdate as u8, 1, 30, PACKET_END,
+        ]);
         assert_eq!(
             Response::parse_bytes(&input).unwrap(),
             (r1, 7)

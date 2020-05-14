@@ -111,7 +111,7 @@ pub struct ControlWindow {
 impl ControlWindow {
     pub fn new(application: &gtk::Application, port_number: Option<u16>) -> Rc<Self> {
         let builder = gtk::Builder::new_from_string(include_str!("resources/arcamclient.glade"));
-        let window: gtk::ApplicationWindow = builder.get_object("applicationWindow").unwrap();
+        let window: gtk::ApplicationWindow = builder.get_object("application_window").unwrap();
         window.set_application(Some(application));
         window.connect_delete_event({
             let a = application.clone();
