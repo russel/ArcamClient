@@ -30,7 +30,7 @@ use gtk::prelude::*;
 use futures;
 use futures::StreamExt;
 
-use arcamclient::arcam_protocol::{AnswerCode, Brightness, Command, MuteState, ZoneNumber};
+use arcamclient::arcam_protocol::{AnswerCode, Brightness, Command, MuteState, PowerState, ZoneNumber};
 use arcamclient::comms_manager;
 use arcamclient::control_window::{ConnectedState, ControlWindow};
 use arcamclient::functionality;
@@ -61,8 +61,10 @@ fn system_test_with_mock_amp() {
 
                     assert_eq!(c_w.get_connect_display_value(), ConnectedState::Connected);
                     assert_eq!(c_w.get_brightness_display_value(), Brightness::Level2);
+                    assert_eq!(c_w.get_power_display_value(ZoneNumber::One), PowerState::On);
                     assert_eq!(c_w.get_volume_display_value(ZoneNumber::One), 30);
                     assert_eq!(c_w.get_mute_display_value(ZoneNumber::One), MuteState::NotMuted);
+                    assert_eq!(c_w.get_power_display_value(ZoneNumber::Two), PowerState::Standby);
                     assert_eq!(c_w.get_volume_display_value(ZoneNumber::Two), 20);
                     assert_eq!(c_w.get_mute_display_value(ZoneNumber::Two), MuteState::NotMuted);
 

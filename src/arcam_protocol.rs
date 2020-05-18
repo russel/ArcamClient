@@ -589,7 +589,54 @@ pub enum VideoSource {
     STB = 0x06,
 }
 
-/// An analogue of bool to represent the mute state.
+/// An analogue of bool to represent the power state of a zone.
+///
+/// Numeric representation as per `Power` return value.
+/// The UI needs a string representation and this avoids spelling errors.
+#[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
+pub enum PowerState {
+    Standby = 0x00,
+    On = 0x01,
+}
+
+impl ToString for PowerState {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Standby => "Standby".to_string(),
+            Self::On => "On".to_string(),
+        }
+    }
+}
+
+impl From<&str> for PowerState {
+    fn from(s: &str) -> Self {
+        match s {
+            "Standby" => Self::Standby,
+            "On" => Self::On,
+            x => panic!("Illegal PowerState value, {}", x),
+        }
+    }
+}
+
+impl From<bool> for PowerState {
+    fn from(b: bool) -> Self {
+        match b {
+            false => Self::Standby,
+            true => Self::On,
+        }
+    }
+}
+
+impl From<PowerState> for bool {
+    fn from(p: PowerState) -> Self {
+        match p {
+            PowerState::Standby => false,
+            PowerState::On => true,
+        }
+    }
+}
+
+/// An analogue of bool to represent the Mute state of a zone.
 ///
 /// Numeric representation as per `RequestMuteState` return value.
 /// The UI needs a string representation and this avoids spelling errors.
@@ -602,7 +649,7 @@ pub enum MuteState {
 impl ToString for MuteState {
     fn to_string(&self) -> String {
         match self {
-            Self::NotMuted => "Not muted".to_string(),
+            Self::NotMuted => "Not Muted".to_string(),
             Self::Muted => "Muted".to_string(),
         }
     }
@@ -612,7 +659,7 @@ impl From<&str> for MuteState {
     fn from(s: &str) -> Self {
         match s {
             "Muted" => Self::Muted,
-            "Not muted" => Self::NotMuted,
+            "Not Muted" => Self::NotMuted,
             x => panic!("Illegal MuteState value, {}", x),
         }
     }

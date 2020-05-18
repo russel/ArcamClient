@@ -81,8 +81,11 @@ async fn start_a_connection_and_set_up_event_listeners(
         while let Some(data) = to_comms_manager.next().await {
             eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: writing {:?}", &data);
             match writer.write_all(&data).await {
-                Ok(_) => { eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: successfully sent packet to amp {:?}", data) },
-                Err(e) => { eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: error sending packet to amp {:?}", e) },
+                Ok(_) => { eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: successfully sent packet to amp {:?}", data); },
+                Err(e) => {
+                    // TODO Must think about showing disconnection in the UI when this happens.
+                    eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: error sending packet to amp {:?}", e);
+                },
             };
         }
     });

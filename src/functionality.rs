@@ -33,7 +33,8 @@ use futures::channel::mpsc::Sender;
 use num_derive::FromPrimitive;  // Apparently unused, but it is necessary.
 use num_traits::FromPrimitive;
 
-use crate::arcam_protocol::{AnswerCode, Command, RC5Command, Request, Response, Source, ZoneNumber, REQUEST_VALUE, get_rc5command_data};
+use crate::arcam_protocol::{AnswerCode, Command, MuteState, PowerState, RC5Command, Request, Response, Source, ZoneNumber,
+                            REQUEST_VALUE, get_rc5command_data};
 use crate::comms_manager;
 use crate::control_window::{ControlWindow, ConnectedState};
 
@@ -60,22 +61,46 @@ pub fn disconnect_from_amp() {
     // TODO What to do to disconnect from the amp?
 }
 
-pub fn send_request(sender: &mut Sender<Vec<u8>>, request: Vec<u8>) {
+pub fn send_request_bytes(sender: &mut Sender<Vec<u8>>, request: &Vec<u8>) {
     eprintln!("functionality::send_request: send message to amp {:?}", request);
-    match sender.try_send(request) {
+    match sender.try_send(request.to_vec()) {
         Ok(_) => {},
-        Err(e) => eprintln!("functionality::send_request: failed to send packet – {:?}", e),
+        Err(e) => eprintln!("functionality::send_request_bytes: failed to send packet – {:?}", e),
     }
+}
+
+pub fn send_request(sender: &mut Sender<Vec<u8>>, request: &Request) {
+    eprintln!("functionality::send_request: send message to amp {:?}", request);
+    send_request_bytes(sender, &request.to_bytes());
 }
 
 pub fn get_brightness_from_amp(sender: &mut Sender<Vec<u8>>) {
     let request = Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_VALUE]).unwrap();
-    send_request(sender, request.to_bytes());
+    send_request(sender, &request);
+}
+
+pub fn get_power_from_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber) {
+    let request = Request::new(zone, Command::Power, vec![REQUEST_VALUE]).unwrap();
+    send_request(sender, &request);
+}
+
+pub fn set_power_on_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber, power: PowerState) {
+    let rc5_data = get_rc5command_data(
+        if zone == ZoneNumber::One {
+            if power == PowerState::On { RC5Command::PowerOn } else { RC5Command::PowerOff }
+        } else {
+            if power == PowerState::On { RC5Command::Zone2PowerOn } else { RC5Command::Zone2PowerOff }
+        }
+    );
+    let data = vec![rc5_data.0, rc5_data.1];
+    let request = Request::new(zone, Command::SimulateRC5IRCommand, data).unwrap();
+    send_request(sender, &request);
+    get_power_from_amp(sender, zone);
 }
 
 pub fn get_source_from_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber) {
     let request = Request::new(zone, Command::RequestCurrentSource, vec![REQUEST_VALUE]).unwrap();
-    send_request(sender, request.to_bytes());
+    send_request(sender, &request);
 }
 
 pub fn set_source_on_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber, source: Source) {
@@ -99,30 +124,40 @@ pub fn set_source_on_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber, source:
     let rc5_data = get_rc5command_data(rc5_command);
     let data = vec![rc5_data.0, rc5_data.1];
     let request = Request::new(zone, Command::SimulateRC5IRCommand, data).unwrap();
-    send_request(sender, request.to_bytes());
+    send_request(sender, &request);
     get_source_from_amp(sender, zone);
 }
 
 
 pub fn get_mute_from_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber) {
     let request = Request::new(zone, Command::RequestMuteStatus, vec![REQUEST_VALUE]).unwrap();
-    send_request(sender, request.to_bytes());
+    send_request(sender, &request);
 }
 
-pub fn set_mute_on_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber, off: bool) {
-    eprintln!("set zone 1 mute state to {}", off);
+pub fn set_mute_on_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber, mute: MuteState) {
+    let rc5_data = get_rc5command_data(
+        if zone == ZoneNumber::One {
+            if mute == MuteState::Muted { RC5Command::MuteOn } else { RC5Command::MuteOff }
+        } else {
+            if mute == MuteState::Muted { RC5Command::Zone2MuteOn } else { RC5Command::Zone2MuteOff }
+        }
+    );
+    let data = vec![rc5_data.0, rc5_data.1];
+    let request = Request::new(zone, Command::SimulateRC5IRCommand, data).unwrap();
+    send_request(sender, &request);
+    get_mute_from_amp(sender, zone);
 }
 
 pub fn get_volume_from_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber) {
     let request = Request::new(zone, Command::SetRequestVolume, vec![REQUEST_VALUE]).unwrap();
-    send_request(sender, request.to_bytes());
+    send_request(sender, &request);
 }
 
 pub fn set_volume_on_amp(sender: &mut Sender<Vec<u8>>, zone:ZoneNumber, value: f64) {
     let volume = value as u8;
     assert!(volume < 100);
     let request = Request::new(zone, Command::SetRequestVolume, vec![volume]).unwrap();
-    send_request(sender, request.to_bytes());
+    send_request(sender, &request);
 }
 
 pub fn initialise_control_window(sender: &mut Sender<Vec<u8>>) {
@@ -133,6 +168,8 @@ pub fn initialise_control_window(sender: &mut Sender<Vec<u8>>) {
         let mut s = sender.clone();
         move || {
             get_brightness_from_amp(&mut s);
+            get_power_from_amp(&mut s, ZoneNumber::One);
+            get_power_from_amp(&mut s, ZoneNumber::Two);
             Continue(false)
         }
     });
@@ -173,6 +210,10 @@ fn handle_response(control_window: &Rc<ControlWindow>, response: &Response) {
     // TODO Deal with non-StatusUpdate packets.
     assert_eq!(response.ac, AnswerCode::StatusUpdate);
     match response.cc {
+        Command::Power => {
+            assert_eq!(response.data.len(), 1);
+            control_window.set_power_display(response.zone, FromPrimitive::from_u8(response.data[0]).unwrap());
+        },
         Command::DisplayBrightness => {
             assert_eq!(response.data.len(), 1);
             control_window.set_brightness_display(FromPrimitive::from_u8(response.data[0]).unwrap())

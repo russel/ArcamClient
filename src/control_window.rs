@@ -35,7 +35,7 @@ use num_traits::FromPrimitive;
 
 use crate::about;
 use crate::functionality;
-use crate::arcam_protocol::{Brightness, MuteState, Source, ZoneNumber};
+use crate::arcam_protocol::{Brightness, MuteState, PowerState, Source, ZoneNumber};
 
 /// An analogue to bool that tries to avoid any spelling errors
 /// in the strings used as representation – needed for the UI.
@@ -89,18 +89,22 @@ pub struct ControlWindow {
     connect_chooser: gtk::CheckButton,
     brightness_display: gtk::Label,
     brightness_chooser: gtk::ComboBoxText,
-    zone_1_source_display: gtk::Label,
-    zone_1_source_chooser: gtk::ComboBoxText,
+    zone_1_power_display: gtk::Label,
+    zone_1_power_chooser: gtk::CheckButton,
     zone_1_volume_display: gtk::Label,
     zone_1_volume_chooser: gtk::SpinButton,
     zone_1_mute_display: gtk::Label,
     zone_1_mute_chooser: gtk::CheckButton,
-    zone_2_source_display: gtk::Label,
-    zone_2_source_chooser: gtk::ComboBoxText,
+    zone_1_source_display: gtk::Label,
+    zone_1_source_chooser: gtk::ComboBoxText,
+    zone_2_power_display: gtk::Label,
+    zone_2_power_chooser: gtk::CheckButton,
     zone_2_volume_display: gtk::Label,
     zone_2_volume_chooser: gtk::SpinButton,
     zone_2_mute_display: gtk::Label,
     zone_2_mute_chooser: gtk::CheckButton,
+    zone_2_source_display: gtk::Label,
+    zone_2_source_chooser: gtk::ComboBoxText,
     radio_data: gtk::Box,
     radio_station_display: gtk::Label,
     music_type_display: gtk::Label,
@@ -144,18 +148,22 @@ impl ControlWindow {
         let connect_chooser: gtk::CheckButton = builder.get_object("connect_chooser").unwrap();
         let brightness_display: gtk::Label = builder.get_object("brightness_display").unwrap();
         let brightness_chooser: gtk::ComboBoxText = builder.get_object("brightness_chooser").unwrap();
-        let zone_1_source_display: gtk::Label = builder.get_object("zone_1_source_display").unwrap();
-        let zone_1_source_chooser: gtk::ComboBoxText= builder.get_object("zone_1_source_chooser").unwrap();
+        let zone_1_power_display: gtk::Label = builder.get_object("zone_1_power_display").unwrap();
+        let zone_1_power_chooser: gtk::CheckButton = builder.get_object("zone_1_power_chooser").unwrap();
         let zone_1_volume_display: gtk::Label = builder.get_object("zone_1_volume_display").unwrap();
         let zone_1_volume_chooser: gtk::SpinButton = builder.get_object("zone_1_volume_chooser").unwrap();
         let zone_1_mute_display: gtk::Label = builder.get_object("zone_1_mute_display").unwrap();
         let zone_1_mute_chooser: gtk::CheckButton = builder.get_object("zone_1_mute_chooser").unwrap();
-        let zone_2_source_display: gtk::Label = builder.get_object("zone_2_source_display").unwrap();
-        let zone_2_source_chooser: gtk::ComboBoxText= builder.get_object("zone_2_source_chooser").unwrap();
+        let zone_1_source_display: gtk::Label = builder.get_object("zone_1_source_display").unwrap();
+        let zone_1_source_chooser: gtk::ComboBoxText= builder.get_object("zone_1_source_chooser").unwrap();
+        let zone_2_power_display: gtk::Label = builder.get_object("zone_2_power_display").unwrap();
+        let zone_2_power_chooser: gtk::CheckButton = builder.get_object("zone_2_power_chooser").unwrap();
         let zone_2_volume_display: gtk::Label = builder.get_object("zone_2_volume_display").unwrap();
         let zone_2_volume_chooser: gtk::SpinButton = builder.get_object("zone_2_volume_chooser").unwrap();
         let zone_2_mute_display: gtk::Label = builder.get_object("zone_2_mute_display").unwrap();
         let zone_2_mute_chooser: gtk::CheckButton = builder.get_object("zone_2_mute_chooser").unwrap();
+        let zone_2_source_display: gtk::Label = builder.get_object("zone_2_source_display").unwrap();
+        let zone_2_source_chooser: gtk::ComboBoxText= builder.get_object("zone_2_source_chooser").unwrap();
         let radio_data: gtk::Box = builder.get_object("radio_data").unwrap();
         let radio_station_display: gtk::Label = builder.get_object("radio_station_display").unwrap();
         let music_type_display: gtk::Label = builder.get_object("music_type_display").unwrap();
@@ -167,18 +175,22 @@ impl ControlWindow {
             connect_chooser,
             brightness_display,
             brightness_chooser,
-            zone_1_source_display,
-            zone_1_source_chooser,
+            zone_1_power_display,
+            zone_1_power_chooser,
             zone_1_volume_display,
             zone_1_volume_chooser,
             zone_1_mute_display,
             zone_1_mute_chooser,
-            zone_2_source_display,
-            zone_2_source_chooser,
+            zone_1_source_display,
+            zone_1_source_chooser,
+            zone_2_power_display,
+            zone_2_power_chooser,
             zone_2_volume_display,
             zone_2_volume_chooser,
             zone_2_mute_display,
             zone_2_mute_chooser,
+            zone_2_source_display,
+            zone_2_source_chooser,
             radio_data,
             radio_station_display,
             music_type_display,
@@ -260,11 +272,11 @@ impl ControlWindow {
                 }
             }
         });
-        control_window.zone_1_source_chooser.connect_changed({
+        control_window.zone_1_power_chooser.connect_toggled({
             let c_w = control_window.clone();
-            move |cbt| {
+            move |button| {
                 if c_w.is_connected() {
-                    functionality::set_source_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::One, Source::from(cbt.get_active_id().unwrap().as_ref()));
+                    functionality::set_power_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::One, button.get_active().into());
                 }
             }
         });
@@ -280,15 +292,23 @@ impl ControlWindow {
             let c_w = control_window.clone();
             move |button| {
                 if c_w.is_connected() {
-                    functionality::set_mute_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::One, button.get_active())
+                    functionality::set_mute_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::One, button.get_active().into())
                 }
             }
         });
-        control_window.zone_2_source_chooser.connect_changed({
+        control_window.zone_1_source_chooser.connect_changed({
             let c_w = control_window.clone();
             move |cbt| {
                 if c_w.is_connected() {
-                    functionality::set_source_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::Two, Source::from(cbt.get_active_id().unwrap().as_ref()));
+                    functionality::set_source_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::One, Source::from(cbt.get_active_id().unwrap().as_ref()));
+                }
+            }
+        });
+        control_window.zone_2_power_chooser.connect_toggled({
+            let c_w = control_window.clone();
+            move |button| {
+                if c_w.is_connected() {
+                    functionality::set_power_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::Two, button.get_active().into());
                 }
             }
         });
@@ -304,7 +324,15 @@ impl ControlWindow {
             let c_w = control_window.clone();
             move |button| {
                 if c_w.is_connected() {
-                    functionality::set_mute_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::Two, button.get_active())
+                    functionality::set_mute_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::Two, button.get_active().into())
+                }
+            }
+        });
+        control_window.zone_2_source_chooser.connect_changed({
+            let c_w = control_window.clone();
+            move |cbt| {
+                if c_w.is_connected() {
+                    functionality::set_source_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::Two, Source::from(cbt.get_active_id().unwrap().as_ref()));
                 }
             }
         });
@@ -329,6 +357,19 @@ impl ControlWindow {
         self.brightness_display.set_text(&brightness_id);
         if self.brightness_chooser.get_active_id().unwrap() != brightness_id {
             self.brightness_chooser.set_active_id(Some(&brightness_id));
+        }
+    }
+
+    pub fn set_power_display(self: &Self, zone: ZoneNumber, power: PowerState) {
+        let text = power.to_string();
+        let (power_display, power_chooser) = match zone {
+            ZoneNumber::One => (&self.zone_1_power_display, &self.zone_1_power_chooser),
+            ZoneNumber::Two => (&self.zone_2_power_display, &self.zone_2_power_chooser),
+        };
+        power_display.set_text(&text);
+        let value: bool = power.into();
+        if power_chooser.get_active() != value {
+            power_chooser.set_active(value);
         }
     }
 
@@ -401,6 +442,16 @@ impl ControlWindow {
 
     pub fn get_brightness_display_value(self: &Self) -> Brightness {
         self.brightness_display.get_text().unwrap().as_str().into()
+    }
+
+    pub fn get_power_display_value(self: &Self, zone: ZoneNumber) -> PowerState {
+        match match zone {
+            ZoneNumber::One => self.zone_1_power_display.get_text(),
+            ZoneNumber::Two => self.zone_2_power_display.get_text(),
+        } {
+            Some(s) => s.as_str().into(),
+            None => panic!("Could not get UI power status for zone {:?}", zone),
+        }
     }
 
     pub fn get_volume_display_value(self: &Self, zone: ZoneNumber) -> u8 {

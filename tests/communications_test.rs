@@ -41,7 +41,7 @@ use arcamclient::arcam_protocol::{
 };
 use arcamclient::comms_manager;
 use arcamclient::control_window::ControlWindow;
-use arcamclient::functionality::{ResponseTuple, send_request};
+use arcamclient::functionality::{ResponseTuple, send_request, send_request_bytes};
 
 use start_avr850::PORT_NUMBER;
 
@@ -75,7 +75,7 @@ fn communications_test() {
 
                 send_request(
                     &mut sender,
-                    Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_VALUE]).unwrap().to_bytes()
+                    &Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_VALUE]).unwrap()
                 );
                 match rx_queue.next().await {
                     Some(s) => assert_eq!(s, Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![Brightness::Level2 as u8]).unwrap().to_bytes()),
@@ -84,7 +84,7 @@ fn communications_test() {
 
                 send_request(
                     &mut sender,
-                    Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![0x14]).unwrap().to_bytes()
+                    &Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![0x14]).unwrap()
                 );
                 match rx_queue.next().await {
                     Some(s) => assert_eq!(s, Response::new(ZoneNumber::One, Command::SetRequestVolume, AnswerCode::StatusUpdate, vec![0x14]).unwrap().to_bytes()),
@@ -93,17 +93,17 @@ fn communications_test() {
 
                 send_request(
                     &mut sender,
-                    Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_VALUE]).unwrap().to_bytes()
+                    &Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_VALUE]).unwrap()
                 );
                 match rx_queue.next().await {
                     Some(s) => assert_eq!(s, Response::new(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::TUNER as u8]).unwrap().to_bytes()),
                     None => assert!(false, "Failed to get a value from the response queue."),
                 };
 
-                // Send a multi-packet request.
+                // Send a multi-packet request. Do this by calling the comms_manage function directly.
                 let mut buffer = Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_VALUE]).unwrap().to_bytes();
                 buffer.append(&mut Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_VALUE]).unwrap().to_bytes());
-                send_request(&mut sender, buffer);
+                send_request_bytes(&mut sender, &buffer);
                 match rx_queue.next().await {
                     Some(s) => assert_eq!(s, Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![0x01]).unwrap().to_bytes()),
                     None => assert!(false, "Failed to get a value from the response queue."),
