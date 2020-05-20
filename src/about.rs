@@ -23,15 +23,7 @@ use std::sync::Mutex;
 use lazy_static::lazy_static;
 
 use gtk;
-// Can't use:
-//
-//use gtk::prelude::*;
-//
-// since it leads to a resolution problem, so have to explicitly list the bits needed.
-use gtk::AboutDialogExt;
-use gtk::DialogExt;
-use gtk::WidgetExt;
-use gtk::GtkWindowExt;
+use gtk::prelude::*;
 
 use gdk_pixbuf::PixbufLoader;
 use gdk_pixbuf::PixbufLoaderExt;
@@ -46,7 +38,7 @@ fn create() -> gtk::AboutDialog {
     authors.push("Russel Winder <russel@winder.org.uk>");
     let mut documentors = Vec::<&str>::new();
     about.set_authors(&authors);
-    about.set_comments(Some("A GTK+-based client for Arcam amps."));
+    about.set_comments(Some("A GTK+-based client for Arcam amplifiers."));
     about.set_copyright(Some("Copyright © 2020  Russel Winder <russel@winder.org.uk>"));
     about.set_documenters(&documentors);
     about.set_license(Some("This program is licenced under GNU General Public Licence (GPL) version 3."));
@@ -61,7 +53,8 @@ fn create() -> gtk::AboutDialog {
     about
 }
 
-/// Present an about dialog in a non-modal way, but only if one is not already displaying.
+/// Present the ArcamClient about dialog in a non-modal way, but only if one is not
+/// already displaying.
 pub fn present(parent: Option<&gtk::ApplicationWindow>) {
     if let Ok(active) = ABOUT.lock() {
         if ! active.get() {
