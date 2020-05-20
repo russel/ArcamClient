@@ -41,7 +41,7 @@ use arcamclient::arcam_protocol::{
 };
 use arcamclient::comms_manager;
 use arcamclient::control_window::ControlWindow;
-use arcamclient::functionality::{ResponseTuple, send_request, send_request_bytes};
+use arcamclient::functionality::{ResponseTuple, get_brightness_from_amp, get_source_from_amp, send_request_bytes, set_volume_on_amp};
 
 use start_avr850::PORT_NUMBER;
 
@@ -73,28 +73,19 @@ fn communications_test() {
             let a = app.clone();
             async move {
 
-                send_request(
-                    &mut sender,
-                    &Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_VALUE]).unwrap()
-                );
+                get_brightness_from_amp(&mut sender);
                 match rx_queue.next().await {
                     Some(s) => assert_eq!(s, Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![Brightness::Level2 as u8]).unwrap().to_bytes()),
                     None => assert!(false, "Failed to get a value from the response queue."),
                 };
 
-                send_request(
-                    &mut sender,
-                    &Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![0x14]).unwrap()
-                );
+                set_volume_on_amp(&mut sender, ZoneNumber::One, 20.0);
                 match rx_queue.next().await {
                     Some(s) => assert_eq!(s, Response::new(ZoneNumber::One, Command::SetRequestVolume, AnswerCode::StatusUpdate, vec![0x14]).unwrap().to_bytes()),
                     None => assert!(false, "Failed to get a value from the response queue."),
                 };
 
-                send_request(
-                    &mut sender,
-                    &Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_VALUE]).unwrap()
-                );
+                get_source_from_amp(&mut sender, ZoneNumber::One);
                 match rx_queue.next().await {
                     Some(s) => assert_eq!(s, Response::new(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::TUNER as u8]).unwrap().to_bytes()),
                     None => assert!(false, "Failed to get a value from the response queue."),
