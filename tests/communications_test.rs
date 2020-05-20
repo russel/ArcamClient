@@ -37,7 +37,7 @@ use futures::StreamExt;
 
 use arcamclient::arcam_protocol::{
     AnswerCode, Brightness, Command, Request, Response, Source, ZoneNumber,
-    REQUEST_VALUE,
+    REQUEST_QUERY,
 };
 use arcamclient::comms_manager;
 use arcamclient::control_window::ControlWindow;
@@ -92,8 +92,8 @@ fn communications_test() {
                 };
 
                 // Send a multi-packet request. Do this by calling the comms_manage function directly.
-                let mut buffer = Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_VALUE]).unwrap().to_bytes();
-                buffer.append(&mut Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_VALUE]).unwrap().to_bytes());
+                let mut buffer = Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_QUERY]).unwrap().to_bytes();
+                buffer.append(&mut Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap().to_bytes());
                 send_request_bytes(&mut sender, &buffer);
                 match rx_queue.next().await {
                     Some(s) => assert_eq!(s, Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![0x01]).unwrap().to_bytes()),

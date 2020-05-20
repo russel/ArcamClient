@@ -18,11 +18,34 @@
  */
 
 /*!
-The Arcam manual states that each Arcam amplifier that has an Ethernet connection
-can be connected to using port 50000 (AVR850, 50001 for AVR600) as a Telnet connection.
-The command PACKET_START (Remote Flow Control) is used to exchange request/response packets
-(asynchronous question answer, not synchronous, response within 3 seconds of request.
-*/
+ * The Arcam manual states that each Arcam amplifier that has an Ethernet connection can be
+ * connected to using port 50000 (AVR850, 50001 for AVR600). The amplifier responds to
+ * messages "AMX" by sending an AMXB response. Otherwise communication is via packets with
+ * well defined structures.  Each packet starts with 0x21 (!) and ends with 0x0d (\r).
+ *
+ * Request packets sent to the amplifier are structured:
+ *
+ * - St (Start transmission): 0x21 (‘!’)
+ * - Zn (Zone number): 0x1, 0x2 for the zone number
+ * - Cc (Command code): the code for the command
+ * - Dl (Data Length): the number of data items following this item, excluding the Et
+ * - Data: the parameters for the response of length n. n is limited to 255
+ * - Et (End transmission): 0x0d (\r)
+ *
+ * Response packet sent by the amplifier are structured:
+ *
+ * - St (Start transmission): 0x21 (‘!’)
+ * - Zn (Zone number): 0x1, 0x2 for the zone number
+ * - Cc (Command code): the code for the command
+ * - Ac (Answer code): the answer code for the request
+ * - Dl (Data Length): the number of data items following this item, excluding the Et
+ * - Data: the parameters for the response of length n. n is limited to 255
+ * - Et (End transmission): 0x0d (\r)
+ *
+ * Communication is not synchronous: the amplifier receives request packets and within
+ * 3 seconds will send a response packet. There is no guarantee that the response order
+ * will be the request order, but it normal circumstances it probably will be.
+ */
 
 use std::collections::HashMap;
 
@@ -35,13 +58,15 @@ use num_traits::FromPrimitive;
 
 /// Zone numbers 1 and 2 for AVR850 but 1, 2, and 3 for AVR600.
 #[derive(Clone, Copy, Debug, Eq, FromPrimitive, Hash, PartialEq)]
+#[repr(u8)]
 pub enum ZoneNumber {
     One = 1,
     Two = 2,
 }
 
-/// The commands (Cc entries) that can be sent to the AVR using the message protocol.
+/// The commands (Cc entries) that can be sent to the amplifier using the message protocol.
 #[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
+#[repr(u8)]
 pub enum Command {
     // =================== System Commands
     Power = 0x00,
@@ -114,6 +139,9 @@ pub enum Command {
 }
 
 /// The RC5 commands used via the `SimulateRC5IRCommand` command.
+// The values of these variants are pairs of u8 values. Python and D can handle this
+// directly, but it seems that Rust cannot. Thus, define the variants and the values
+// separately. :-(
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum RC5Command {
     // The order is as it is written in the table of the documentation.
@@ -238,7 +266,7 @@ pub enum RC5Command {
 
 lazy_static! {
     // The data for the RC5 commands. Lazy statics cannot be exported it seems
-    //  so use an accessor function to get the values.
+    // so use an accessor function to get the values.
     static ref RC5DATA: HashMap<RC5Command, (u8, u8)> = {
         let mut d = HashMap::new();
         d.insert(RC5Command::Standby, (0x10, 0x0c));
@@ -492,8 +520,9 @@ pub fn get_rc5command_data(rc5command: RC5Command) -> (u8, u8) {
     RC5DATA[&rc5command]
 }
 
-/// The answer codes (Ac entries) that can be received from the AVR.
+/// The answer codes (Ac entries) that can be received from the amplifier.
 #[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
+#[repr(u8)]
 pub enum AnswerCode {
     StatusUpdate = 0x00,
     ZoneInvalid = 0x82,
@@ -503,8 +532,9 @@ pub enum AnswerCode {
     InvalidDataLength = 0x86,
 }
 
-/// The three levels of brightness of the display.
+/// The three levels of brightness of the amplifier display.
 #[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
+#[repr(u8)]
 pub enum Brightness {
     Off = 0,
     Level1 = 1,
@@ -532,10 +562,11 @@ impl From<&str> for Brightness {
     }
 }
 
-/// The various sources.
+/// The various sources the amplifier can use.
 ///
-/// This is for the `RequestCurrentSource` command.
+/// Numeric representation as per the `RequestCurrentSource` command return value.
 #[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
+#[repr(u8)]
 pub enum Source {
     FollowZone1 = 0x00,
     CD = 0x01,
@@ -579,8 +610,9 @@ impl From<&str> for Source {
 
 /// The video sources.
 ///
-/// The sources as used in the `VideoSelection` command.
+/// Numeric representation as per the `VideoSelection` command return value.
 #[derive(Copy, Clone, Debug, Eq, FromPrimitive, PartialEq)]
+#[repr(u8)]
 pub enum VideoSource {
     BD = 0x00,
     SAT = 0x01,
@@ -593,9 +625,10 @@ pub enum VideoSource {
 
 /// An analogue of bool to represent the power state of a zone.
 ///
-/// Numeric representation as per `Power` return value.
+/// Numeric representation as per `Power` command return value.
 /// The UI needs a string representation and this avoids spelling errors.
 #[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
+#[repr(u8)]
 pub enum PowerState {
     Standby = 0x00,
     On = 0x01,
@@ -638,11 +671,12 @@ impl From<PowerState> for bool {
     }
 }
 
-/// An analogue of bool to represent the Mute state of a zone.
+/// An analogue of bool to represent the mute state of a zone.
 ///
-/// Numeric representation as per `RequestMuteState` return value.
+/// Numeric representation as per the `RequestMuteState` command return value.
 /// The UI needs a string representation and this avoids spelling errors.
 #[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
+#[repr(u8)]
 pub enum MuteState {
     Muted = 0x00,
     NotMuted = 0x01,
@@ -692,9 +726,9 @@ pub static PACKET_START: u8 = 0x21;
 pub static PACKET_END: u8 = 0x0d;
 
 /// The values used to represent the question of which value is currently set.
-pub static REQUEST_VALUE: u8 = 0xf0;
+pub static REQUEST_QUERY: u8 = 0xf0;
 
-/// Represent a request to the AVR.
+/// A request to the amplifier.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Request {
     pub zone: ZoneNumber,
@@ -704,9 +738,9 @@ pub struct Request {
 
 impl Request {
     /**
-    Create a new request.
-
-    The data value is restricted to being at most 255 bytes long.
+     * Create a new request.
+     *
+     * The data value is restricted to being at most 255 bytes long.
      */
     pub fn new(zone: ZoneNumber, cc: Command, data: Vec<u8>) -> Result<Self, &'static str> {
         if data.len() > 255 { Err("Cannot have more than 255 bytes as data.") }
@@ -714,17 +748,17 @@ impl Request {
     }
 
     /**
-    Construct a byte sequence representing a valid request to the AVR.
-
-    All requests are structured:
-
-    - St (Start transmission): PACKET_START ‘!’
-    - Zn (Zone number): 0x1, 0x2 for the zone number
-    - Cc (Command code): the code for the command
-    - Dl (Data Length): the number of data items following this item, excluding the ETR
-    - Data: the parameters for the response of length n. n is limited to 255
-    - Et (End transmission): PACKET_END
-    */
+     * Return the byte sequence representing this request.
+     *
+     * All requests are structured:
+     *
+     * - St (Start transmission): PACKET_START
+     * - Zn (Zone number): 0x1, 0x2 for the zone number
+     * - Cc (Command code): the code for the command
+     * - Dl (Data Length): the number of data items following this item, excluding the Et
+     * - Data: the parameters for the response of length n. n is limited to 255
+     * - Et (End transmission): PACKET_END
+     */
     pub fn to_bytes(self: &Self) -> Vec<u8> {
         let dl = self.data.len();
         if dl >= 256 { panic!("args array length not right."); }
@@ -735,46 +769,47 @@ impl Request {
     }
 
     /**
-     Parse the bytes to create a tuple representing an Arcam request.
-
-    All requests are structured:
-
-    - St (Start transmission): PACKET_START ‘!’
-    - Zn (Zone number): 0x1, 0x2 for the zone number
-    - Cc (Command code): the code for the command
-    - Dl (Data Length): the number of data items following this item, excluding the ETR
-    - Data: the parameters for the response of length n. n is limited to 255
-    - Et (End transmission): PACKET_END
-    */
-    pub fn parse_bytes(packet: &[u8]) -> Result<(Self, usize), &str> {
-        let packet_length = packet.len();
+     * Parse the bytes in the buffer to create a tuple representing a request and the
+     * number of bytes used for the request packet.
+     *
+     * All requests are structured:
+     *
+     * - St (Start transmission): PACKET_START
+     * - Zn (Zone number): 0x1, 0x2 for the zone number
+     * - Cc (Command code): the code for the command
+     * - Dl (Data Length): the number of data items following this item, excluding the Et
+     * - Data: the parameters for the response of length n. n is limited to 255
+     * - Et (End transmission): PACKET_END
+     */
+    pub fn parse_bytes(buffer: &[u8]) -> Result<(Self, usize), &str> {
+        let packet_length = buffer.len();
         if packet_length < 5 { return Err("Insufficient bytes to form a packet."); }
         let mut index = 0;
-        if packet[index] != PACKET_START { return Err("First byte is not the start of packet marker."); }
+        if buffer[index] != PACKET_START { return Err("First byte is not the start of packet marker."); }
         index += 1;
         if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
-        let zone = FromPrimitive::from_u8(packet[index]).unwrap();
+        let zone = FromPrimitive::from_u8(buffer[index]).unwrap();
         index += 1;
         if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
-        let cc = FromPrimitive::from_u8(packet[index]).unwrap();
+        let cc = FromPrimitive::from_u8(buffer[index]).unwrap();
         index += 1;
         if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
-        let dl = packet[index] as usize;
+        let dl = buffer[index] as usize;
         index += 1;
         if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
         let end_index = index + dl;
         if end_index >= packet_length { return Err("Insufficient bytes to form a packet."); }
-        let data = packet[index..end_index].to_vec();
+        let data = buffer[index..end_index].to_vec();
         assert_eq!(data.len(), dl);
         index = end_index;
         if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
-        if packet[index] != PACKET_END { return Err("Final byte is not the end of packet marker."); }
+        if buffer[index] != PACKET_END { return Err("Final byte is not the end of packet marker."); }
         index += 1;
         Ok((Self{zone, cc, data}, index))
     }
 }
 
-///Represents a response form the AVR.
+/// A response from the amplifier.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Response {
     pub zone: ZoneNumber,
@@ -784,24 +819,29 @@ pub struct Response {
 }
 
 impl Response {
+    /**
+     * Create a new response.
+     *
+     * The data value is restricted to being at most 255 bytes long.
+     */
     pub fn new(zone: ZoneNumber, cc: Command, ac: AnswerCode, data: Vec<u8>) -> Result<Self, &'static str> {
         if data.len() > 255 { Err("data is too long for a response.") }
         else { Ok(Self{zone, cc, ac, data}) }
     }
 
     /**
-    Construct a byte sequence representing a valid response from the AVR.
-
-    All responses are structured:
-
-    - St (Start transmission): PACKET_START ‘!’
-    - Zn (Zone number): 0x1, 0x2 for the zone number
-    - Cc (Command code): the code for the command
-    - Ac (Answer code): the answer code for the request
-    - Dl (Data Length): the number of data items following this item, excluding the ETR
-    - Data: the parameters for the response of length n. n is limited to 255
-    - Et (End transmission): PACKET_END
-    */
+     * Return the byte sequence representing this response.
+     *
+     * All responses are structured:
+     *
+     * - St (Start transmission): PACKET_START
+     * - Zn (Zone number): 0x1, 0x2 for the zone number
+     * - Cc (Command code): the code for the command
+     * - Ac (Answer code): the answer code for the request
+     * - Dl (Data Length): the number of data items following this item, excluding the Et
+     * - Data: the parameters for the response of length n. n is limited to 255
+     * - Et (End transmission): PACKET_END
+     */
     pub fn to_bytes(self: &Self) -> Vec<u8> {
         let dl = self.data.len();
         if dl >= 256 { panic!("data length not right."); }
@@ -812,44 +852,45 @@ impl Response {
     }
 
     /**
-    Parse the bytes to create a tuple representing an Arcam response.
-
-    All responses are structured;
-
-    - St (Start transmission): PACKET_START ‘!’
-    - Zn (Zone number): 0x1, 0x2 for the zone number
-    - Cc (Command code): the code for the command
-    - Ac (Answer code): the answer code for the request
-    - Dl (Data Length): the number of data items following this item, excluding the ETR
-    - Data: the parameters for the response of length n. n is limited to 255
-    - Et (End transmission): PACKET_END
-    */
-    pub fn parse_bytes(packet: &[u8]) -> Result<(Self, usize), &'static str> {
-        let packet_length = packet.len();
+     * Parse the bytes in the buffer to create a tuple representing a response and the
+     * number of bytes used for the request packet.
+     *
+     * All responses are structured;
+     *
+     * - St (Start transmission): PACKET_START ‘!’
+     * - Zn (Zone number): 0x1, 0x2 for the zone number
+     * - Cc (Command code): the code for the command
+     * - Ac (Answer code): the answer code for the request
+     * - Dl (Data Length): the number of data items following this item, excluding the ETR
+     * - Data: the parameters for the response of length n. n is limited to 255
+     * - Et (End transmission): PACKET_END
+     */
+    pub fn parse_bytes(buffer: &[u8]) -> Result<(Self, usize), &'static str> {
+        let packet_length = buffer.len();
         if packet_length < 6 { return Err("Insufficient bytes to form a packet."); }
         let mut index = 0;
-        if packet[index] != PACKET_START { return Err("First byte is not the start of packet marker."); }
+        if buffer[index] != PACKET_START { return Err("First byte is not the start of packet marker."); }
         index += 1;
         if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
-        let zone = FromPrimitive::from_u8(packet[index]).unwrap();
+        let zone = FromPrimitive::from_u8(buffer[index]).unwrap();
         index += 1;
         if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
-        let cc = FromPrimitive::from_u8(packet[index]).unwrap();
+        let cc = FromPrimitive::from_u8(buffer[index]).unwrap();
         index += 1;
         if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
-        let ac = FromPrimitive::from_u8(packet[index]).unwrap();
+        let ac = FromPrimitive::from_u8(buffer[index]).unwrap();
         index += 1;
         if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
-        let dl = packet[index] as usize;
+        let dl = buffer[index] as usize;
         index += 1;
         if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
         let end_index = index + dl;
         if end_index >= packet_length { return Err("Insufficient bytes to form a packet."); }
-        let data = packet[index..end_index].to_vec();
+        let data = buffer[index..end_index].to_vec();
         assert_eq!(data.len(), dl);
         index = end_index;
         if index >= packet_length { return Err("Insufficient bytes to form a packet."); }
-        if packet[index] != PACKET_END { return Err("Final byte is not the end of packet marker."); }
+        if buffer[index] != PACKET_END { return Err("Final byte is not the end of packet marker."); }
         index += 1;
         Ok((Self{zone, cc, ac, data}, index))
     }
@@ -863,19 +904,19 @@ mod tests {
 
     #[test]
     fn create_display_brightness_request() {
-        let request = Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_VALUE]).unwrap();
+        let request = Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_QUERY]).unwrap();
         assert_eq!(
             request.to_bytes(),
-            [PACKET_START, ZoneNumber::One as u8, Command::DisplayBrightness as u8, 0x01, REQUEST_VALUE, PACKET_END]
+            [PACKET_START, ZoneNumber::One as u8, Command::DisplayBrightness as u8, 0x01, REQUEST_QUERY, PACKET_END]
         );
     }
 
     #[test]
     fn create_get_volume_request() {
-        let request = Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![REQUEST_VALUE]).unwrap();
+        let request = Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![REQUEST_QUERY]).unwrap();
         assert_eq!(
             request.to_bytes(),
-            [PACKET_START, ZoneNumber::One as u8, Command::SetRequestVolume as u8, 0x01, REQUEST_VALUE, PACKET_END]
+            [PACKET_START, ZoneNumber::One as u8, Command::SetRequestVolume as u8, 0x01, REQUEST_QUERY, PACKET_END]
         );
     }
 
@@ -910,15 +951,15 @@ mod tests {
 
     #[test]
     fn parse_buffer_with_multiple_request_packets() {
-        let r1 = Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_VALUE]).unwrap();
-        let r2 = Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_VALUE]).unwrap();
+        let r1 = Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap();
+        let r2 = Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_QUERY]).unwrap();
         let r3 = Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![30u8]).unwrap();
         let mut input = r1.to_bytes();
         input.append(&mut r2.to_bytes());
         input.append(&mut r3.to_bytes());
         assert_eq!(input, vec![
-            PACKET_START, ZoneNumber::One as u8, Command::RequestCurrentSource as u8, 1, REQUEST_VALUE, PACKET_END,
-            PACKET_START, ZoneNumber::One as u8, Command::DisplayBrightness as u8, 1, REQUEST_VALUE, PACKET_END,
+            PACKET_START, ZoneNumber::One as u8, Command::RequestCurrentSource as u8, 1, REQUEST_QUERY, PACKET_END,
+            PACKET_START, ZoneNumber::One as u8, Command::DisplayBrightness as u8, 1, REQUEST_QUERY, PACKET_END,
             PACKET_START, ZoneNumber::One as u8, Command::SetRequestVolume as u8, 1, 30, PACKET_END,
         ]);
         assert_eq!(
@@ -985,15 +1026,15 @@ mod tests {
 
     #[test]
     fn parse_buffer_with_multiple_response_packets() {
-        let r1 = Response::new(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![REQUEST_VALUE]).unwrap();
-        let r2 = Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![REQUEST_VALUE]).unwrap();
+        let r1 = Response::new(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![REQUEST_QUERY]).unwrap();
+        let r2 = Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![REQUEST_QUERY]).unwrap();
         let r3 = Response::new(ZoneNumber::One, Command::SetRequestVolume, AnswerCode::StatusUpdate, vec![30u8]).unwrap();
         let mut input = r1.to_bytes();
         input.append(&mut r2.to_bytes());
         input.append(&mut r3.to_bytes());
         assert_eq!(input, vec![
-            PACKET_START, ZoneNumber::One as u8, Command::RequestCurrentSource as u8, AnswerCode::StatusUpdate as u8, 1, REQUEST_VALUE, PACKET_END,
-            PACKET_START, ZoneNumber::One as u8, Command::DisplayBrightness as u8, AnswerCode::StatusUpdate as u8, 1, REQUEST_VALUE, PACKET_END,
+            PACKET_START, ZoneNumber::One as u8, Command::RequestCurrentSource as u8, AnswerCode::StatusUpdate as u8, 1, REQUEST_QUERY, PACKET_END,
+            PACKET_START, ZoneNumber::One as u8, Command::DisplayBrightness as u8, AnswerCode::StatusUpdate as u8, 1, REQUEST_QUERY, PACKET_END,
             PACKET_START, ZoneNumber::One as u8, Command::SetRequestVolume as u8, AnswerCode::StatusUpdate as u8, 1, 30, PACKET_END,
         ]);
         assert_eq!(

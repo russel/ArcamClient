@@ -68,7 +68,7 @@ use num_traits::FromPrimitive;
 
 use arcamclient::arcam_protocol::{
     AnswerCode, Brightness, Command, MuteState, PowerState, RC5Command, Request, Response, Source, VideoSource, ZoneNumber,
-    PACKET_START, REQUEST_VALUE,
+    PACKET_START, REQUEST_QUERY,
 };
 
 /// Zone state for an AVR. An AVR comprises a number of zones.
@@ -118,7 +118,7 @@ fn create_command_response(request: &Request, amp_state: &mut AmpState) -> Resul
     match request.cc {
         Command::Power => {
             assert_eq!(request.data.len(), 1);
-            if request.data[0] != REQUEST_VALUE {
+            if request.data[0] != REQUEST_QUERY {
                 Err(format!("Incorrect Power command {:?}.", request.data[0]))
             } else {
                 Ok(Response::new(request.zone, request.cc, AnswerCode::StatusUpdate, vec![amp_state.zones[&request.zone].power.get() as u8]).unwrap())
@@ -126,7 +126,7 @@ fn create_command_response(request: &Request, amp_state: &mut AmpState) -> Resul
         },
         Command::DisplayBrightness => {
             assert_eq!(request.data.len(), 1);
-            if request.data[0] != REQUEST_VALUE {
+            if request.data[0] != REQUEST_QUERY {
                 Err(format!("Incorrect DisplayBrightness command {:?}.", request.data[0]))
             } else {
                 Ok(Response::new(request.zone, request.cc, AnswerCode::StatusUpdate, vec![amp_state.brightness.get() as u8]).unwrap())
@@ -134,7 +134,7 @@ fn create_command_response(request: &Request, amp_state: &mut AmpState) -> Resul
         },
         Command::SetRequestVolume => {
             assert_eq!(request.data.len(), 1);
-            if request.data[0] == REQUEST_VALUE {
+            if request.data[0] == REQUEST_QUERY {
                 Ok(Response::new(request.zone, request.cc, AnswerCode::StatusUpdate, vec![amp_state.zones[&request.zone].volume.get()]).unwrap())
             } else if request.data[0] < 100 {
                 amp_state.zones[&request.zone].volume.set(request.data[0]);
@@ -145,7 +145,7 @@ fn create_command_response(request: &Request, amp_state: &mut AmpState) -> Resul
         },
         Command::RequestCurrentSource => {
             assert_eq!(request.data.len(), 1);
-            if request.data[0] != REQUEST_VALUE {
+            if request.data[0] != REQUEST_QUERY {
                 Err(format!("Incorrect RequestCurrentSource command {:?}.", request.data[0]))
             } else {
                 Ok(Response::new(request.zone, request.cc, AnswerCode::StatusUpdate, vec![amp_state.zones[&request.zone].source.get() as u8]).unwrap())
@@ -153,7 +153,7 @@ fn create_command_response(request: &Request, amp_state: &mut AmpState) -> Resul
         },
         Command::RequestMuteStatus => {
             assert_eq!(request.data.len(), 1);
-            if request.data[0] != REQUEST_VALUE {
+            if request.data[0] != REQUEST_QUERY {
                 Err(format!("Incorrect RequestMuteStatus command {:?}.", request.data[0]))
             } else {
                 let is_mute = amp_state.zones[&request.zone].mute.get() as u8;
@@ -163,7 +163,7 @@ fn create_command_response(request: &Request, amp_state: &mut AmpState) -> Resul
         Command::VideoSelection => {
             // TODO is the source the same as the video source in the amp?
             assert_eq!(request.data.len(), 1);
-            if request.data[0] == REQUEST_VALUE {
+            if request.data[0] == REQUEST_QUERY {
                 let video_source = match amp_state.zones[&request.zone].source.get() {
                     Source::BD => VideoSource::BD,
                     Source::SAT =>VideoSource::SAT,
@@ -354,7 +354,7 @@ mod tests {
 
     use arcamclient::arcam_protocol::{
         AnswerCode, Brightness, Command, MuteState, PowerState, RC5Command, Request, Response, Source, ZoneNumber,
-        REQUEST_VALUE,
+        REQUEST_QUERY,
         get_rc5command_data,
     };
 
@@ -363,7 +363,7 @@ mod tests {
         let mut amp_state: AmpState = Default::default();
         assert_eq!(amp_state.brightness.get(), Brightness::Level2);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_VALUE]).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_QUERY]).unwrap(), &mut amp_state).unwrap(),
             Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![Brightness::Level2 as u8]).unwrap());
         assert_eq!(amp_state.brightness.get(), Brightness::Level2);
     }
@@ -396,7 +396,7 @@ mod tests {
         let mut amp_state: AmpState = Default::default();
         assert_eq!(amp_state.zones[&ZoneNumber::One].power.get(), PowerState::On);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::Power, vec![REQUEST_VALUE]).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::One, Command::Power, vec![REQUEST_QUERY]).unwrap(), &mut amp_state).unwrap(),
             Response::new(ZoneNumber::One, Command::Power, AnswerCode::StatusUpdate, vec![PowerState::On as u8]).unwrap());
         assert_eq!(amp_state.zones[&ZoneNumber::One].power.get(), PowerState::On);
     }
@@ -429,7 +429,7 @@ mod tests {
         let volume = 30u8;
         assert_eq!(amp_state.zones[&ZoneNumber::One].volume.get(), volume);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![REQUEST_VALUE]).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![REQUEST_QUERY]).unwrap(), &mut amp_state).unwrap(),
             Response::new(ZoneNumber::One, Command::SetRequestVolume, AnswerCode::StatusUpdate, vec![volume]).unwrap());
         assert_eq!(amp_state.zones[&ZoneNumber::One].volume.get(), volume);
     }
@@ -450,7 +450,7 @@ mod tests {
         let mut amp_state: AmpState = Default::default();
         assert_eq!(amp_state.zones[&ZoneNumber::One].mute.get(), MuteState::NotMuted);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::RequestMuteStatus, vec![REQUEST_VALUE]).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::One, Command::RequestMuteStatus, vec![REQUEST_QUERY]).unwrap(), &mut amp_state).unwrap(),
             Response::new(ZoneNumber::One, Command::RequestMuteStatus, AnswerCode::StatusUpdate, vec![MuteState::NotMuted as u8]).unwrap());
         assert_eq!(amp_state.zones[&ZoneNumber::One].mute.get(), MuteState::NotMuted);
     }
@@ -482,7 +482,7 @@ mod tests {
         let mut amp_state: AmpState = Default::default();
         assert_eq!(amp_state.zones[&ZoneNumber::One].source.get(), Source::CD);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_VALUE]).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap(), &mut amp_state).unwrap(),
             Response::new(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::CD as u8]).unwrap());
         assert_eq!(amp_state.zones[&ZoneNumber::One].source.get(), Source::CD);
     }
@@ -515,7 +515,7 @@ mod tests {
         let mut amp_state: AmpState = Default::default();
         assert_eq!(amp_state.zones[&ZoneNumber::Two].power.get(), PowerState::Standby);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::Two, Command::Power, vec![REQUEST_VALUE]).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::Two, Command::Power, vec![REQUEST_QUERY]).unwrap(), &mut amp_state).unwrap(),
             Response::new(ZoneNumber::Two, Command::Power, AnswerCode::StatusUpdate, vec![PowerState::Standby as u8]).unwrap());
         assert_eq!(amp_state.zones[&ZoneNumber::Two].power.get(), PowerState::Standby);
     }
@@ -548,7 +548,7 @@ mod tests {
         let volume = 20u8;
         assert_eq!(amp_state.zones[&ZoneNumber::Two].volume.get(), volume);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::Two, Command::SetRequestVolume, vec![REQUEST_VALUE]).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::Two, Command::SetRequestVolume, vec![REQUEST_QUERY]).unwrap(), &mut amp_state).unwrap(),
             Response::new(ZoneNumber::Two, Command::SetRequestVolume, AnswerCode::StatusUpdate, vec![volume]).unwrap());
         assert_eq!(amp_state.zones[&ZoneNumber::Two].volume.get(), volume);
     }
@@ -569,7 +569,7 @@ mod tests {
         let mut amp_state: AmpState = Default::default();
         assert_eq!(amp_state.zones[&ZoneNumber::Two].mute.get(), MuteState::NotMuted);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::Two, Command::RequestMuteStatus, vec![REQUEST_VALUE]).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::Two, Command::RequestMuteStatus, vec![REQUEST_QUERY]).unwrap(), &mut amp_state).unwrap(),
             Response::new(ZoneNumber::Two, Command::RequestMuteStatus, AnswerCode::StatusUpdate, vec![MuteState::NotMuted as u8]).unwrap());
         assert_eq!(amp_state.zones[&ZoneNumber::Two].mute.get(), MuteState::NotMuted);
     }
@@ -601,7 +601,7 @@ mod tests {
         let mut amp_state: AmpState = Default::default();
         assert_eq!(amp_state.zones[&ZoneNumber::Two].source.get(), Source::FollowZone1);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::Two, Command::RequestCurrentSource, vec![REQUEST_VALUE]).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::Two, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap(), &mut amp_state).unwrap(),
             Response::new(ZoneNumber::Two, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::FollowZone1 as u8]).unwrap());
         assert_eq!(amp_state.zones[&ZoneNumber::Two].source.get(), Source::FollowZone1);
     }

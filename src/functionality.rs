@@ -36,7 +36,7 @@ use num_derive::FromPrimitive;  // Apparently unused, but it is necessary.
 use num_traits::FromPrimitive;
 
 use crate::arcam_protocol::{AnswerCode, Command, MuteState, PowerState, RC5Command, Request, Response, Source, ZoneNumber,
-                            REQUEST_VALUE, get_rc5command_data};
+                            REQUEST_QUERY, get_rc5command_data};
 use crate::comms_manager;
 use crate::control_window::{ControlWindow, ConnectedState};
 
@@ -77,11 +77,11 @@ pub fn send_request(sender: &mut Sender<Vec<u8>>, request: &Request) {
 }
 
 pub fn get_brightness_from_amp(sender: &mut Sender<Vec<u8>>) {
-    send_request(sender, &Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_VALUE]).unwrap());
+    send_request(sender, &Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_QUERY]).unwrap());
 }
 
 pub fn get_power_from_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber) {
-    send_request(sender, &Request::new(zone, Command::Power, vec![REQUEST_VALUE]).unwrap());
+    send_request(sender, &Request::new(zone, Command::Power, vec![REQUEST_QUERY]).unwrap());
 }
 
 pub fn set_power_on_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber, power: PowerState) {
@@ -96,7 +96,7 @@ pub fn set_power_on_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber, power: P
 }
 
 pub fn get_volume_from_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber) {
-    send_request(sender, &Request::new(zone, Command::SetRequestVolume, vec![REQUEST_VALUE]).unwrap());
+    send_request(sender, &Request::new(zone, Command::SetRequestVolume, vec![REQUEST_QUERY]).unwrap());
 }
 
 pub fn set_volume_on_amp(sender: &mut Sender<Vec<u8>>, zone:ZoneNumber, value: f64) {
@@ -106,7 +106,7 @@ pub fn set_volume_on_amp(sender: &mut Sender<Vec<u8>>, zone:ZoneNumber, value: f
 }
 
 pub fn get_mute_from_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber) {
-    send_request(sender, &Request::new(zone, Command::RequestMuteStatus, vec![REQUEST_VALUE]).unwrap());
+    send_request(sender, &Request::new(zone, Command::RequestMuteStatus, vec![REQUEST_QUERY]).unwrap());
 }
 
 pub fn set_mute_on_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber, mute: MuteState) {
@@ -121,7 +121,7 @@ pub fn set_mute_on_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber, mute: Mut
 }
 
 pub fn get_source_from_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber) {
-    send_request(sender, &Request::new(zone, Command::RequestCurrentSource, vec![REQUEST_VALUE]).unwrap());
+    send_request(sender, &Request::new(zone, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap());
 }
 
 pub fn set_source_on_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber, source: Source) {

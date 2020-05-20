@@ -24,7 +24,7 @@ use std::io::{Write, Read};
 use std::net::{SocketAddr, TcpStream};
 use std::str::from_utf8;
 
-use arcamclient::arcam_protocol::{AnswerCode, Command, RC5Command, Request, Response, Source, ZoneNumber, REQUEST_VALUE, get_rc5command_data, Brightness};
+use arcamclient::arcam_protocol::{AnswerCode, Command, RC5Command, Request, Response, Source, ZoneNumber, REQUEST_QUERY, get_rc5command_data, Brightness};
 
 fn connect_to_mock_avr850() -> TcpStream {
     match TcpStream::connect(SocketAddr::from(([127, 0, 0, 1], unsafe { start_avr850::PORT_NUMBER }))) {
@@ -72,7 +72,7 @@ fn amx_value() {
 #[test]
 fn get_default_brightness() {
     let data = connect_mock_avr850_send_and_receive(
-        &Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_VALUE]).unwrap().to_bytes()
+        &Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_QUERY]).unwrap().to_bytes()
     );
     assert_eq!(
         Response::parse_bytes(&data).unwrap(),
@@ -82,9 +82,9 @@ fn get_default_brightness() {
 
 #[test]
 fn send_multi_packet_message() {
-    let mut send_data = Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_VALUE]).unwrap().to_bytes();
-    send_data.append(&mut Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_VALUE]).unwrap().to_bytes());
-    send_data.append(&mut Request::new(ZoneNumber::Two, Command::RequestCurrentSource, vec![REQUEST_VALUE]).unwrap().to_bytes());
+    let mut send_data = Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_QUERY]).unwrap().to_bytes();
+    send_data.append(&mut Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap().to_bytes());
+    send_data.append(&mut Request::new(ZoneNumber::Two, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap().to_bytes());
     let stream = connect_to_mock_avr850();
     send_to_mock_avr850(&stream, &send_data);
     let mut buffer = [0u8; 4096];
