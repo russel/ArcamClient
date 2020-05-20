@@ -48,8 +48,7 @@
  */
 
 use std::collections::HashMap;
-
-use log::debug;
+use std::fmt;
 
 use lazy_static::lazy_static;
 
@@ -513,6 +512,13 @@ impl From<(u8, u8)> for RC5Command {
     }
 }
 
+impl From<&Vec<u8>> for RC5Command {
+    fn from(data: &Vec<u8>) -> Self {
+        assert_eq!(data.len(), 2);
+        RC5Command::from((data[0], data[1]))
+    }
+}
+
 /// Accessor for the RC5 command data.
 // This is needed because lazy static values seemingly cannot be exported out of the
 // module to another module in the crate, or another crate.
@@ -729,7 +735,7 @@ pub static PACKET_END: u8 = 0x0d;
 pub static REQUEST_QUERY: u8 = 0xf0;
 
 /// A request to the amplifier.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct Request {
     pub zone: ZoneNumber,
     pub cc: Command,
@@ -809,8 +815,28 @@ impl Request {
     }
 }
 
+impl fmt::Debug for Request {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut ds = f.debug_struct("Request");
+        ds.field("zone", &self.zone);
+        ds.field("cc", &self.cc);
+        ds.field("data", &self.data);
+        if self.cc == Command::SimulateRC5IRCommand {
+            assert_eq!(self.data.len(), 2);
+            ds.field("rc5command", &RC5Command::from(&self.data));
+        } else if self.data.len() == 1 && self.data[0] == REQUEST_QUERY {
+            ds.field("value", &"RequestQuery");
+        } else if self.cc == Command::RequestCurrentSource {
+            assert_eq!(self.data.len(), 1);
+            let value: Source = FromPrimitive::from_u8(self.data[0]).unwrap();
+            ds.field("value", &value);
+        }
+        ds.finish()
+    }
+}
+
 /// A response from the amplifier.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct Response {
     pub zone: ZoneNumber,
     pub cc: Command,
@@ -895,6 +921,29 @@ impl Response {
         Ok((Self{zone, cc, ac, data}, index))
     }
 }
+
+
+impl fmt::Debug for Response {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut ds = f.debug_struct("Request");
+        ds.field("zone", &self.zone);
+        ds.field("cc", &self.cc);
+        ds.field("ac", &self.ac);
+        ds.field("data", &self.data);
+        if self.cc == Command::SimulateRC5IRCommand {
+            assert_eq!(self.data.len(), 2);
+            ds.field("rc5command", &RC5Command::from(&self.data));
+        }else if self.data.len() == 1 && self.data[0] == REQUEST_QUERY {
+            ds.field("value", &"RequestQuery");
+        } else if self.cc == Command::RequestCurrentSource {
+            assert_eq!(self.data.len(), 1);
+            let value: Source = FromPrimitive::from_u8(self.data[0]).unwrap();
+            ds.field("value", &value);
+        }
+        ds.finish()
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

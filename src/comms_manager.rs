@@ -38,16 +38,16 @@ async fn listen_to_reader(
     // TODO should the byte sequence parsing happen here or elsewhere?
     let mut queue: Vec<u8> = vec![];
     let mut buffer = [0u8; 256];
-    debug!("Entering listen loop");
+    debug!("listen_to_reader:  Entering listen loop.");
     loop {
         // TODO How to disconnect this listener when the connection is closed?
         let count = match reader.read(&mut buffer).await {
             Ok(s) => {
-                debug!("Got a packet: {:?}", &buffer[..s]);
+                debug!("listen_to_reader:  Got a packet: {:?}.", &buffer[..s]);
                 s
             },
             Err(e) => {
-                debug!("Failed to read – {:?}", e);
+                debug!("listen_to_reader:  Failed to read – {:?}.", e);
                 0
             },
         };
@@ -55,7 +55,7 @@ async fn listen_to_reader(
         if count == 0 { break; }
         match from_comms_manager.send(buffer[..count].to_vec()) {
             Ok(_) => {},
-            Err(e) => debug!("Failed to send packet – {:?}.", e),
+            Err(e) => debug!("listen_to_reader:  Failed to send packet – {:?}.", e),
         };
     }
 }
@@ -65,15 +65,15 @@ async fn start_a_connection_and_set_up_event_listeners(
     mut to_comms_manager: futures::channel::mpsc::Receiver<Vec<u8>>,
     address: gio::NetworkAddress,
 ) {
-    debug!("Setting up connection to {}:{}", address.get_hostname().unwrap(), address.get_port());
+    debug!("start_a_connection_and_set_up_event_listeners:  Setting up connection to {}:{}.", address.get_hostname().unwrap(), address.get_port());
     let client = SocketClient::new();
     let connection = match client.connect(&address).await {
         Ok(s) => {
-            debug!("Connected to {}:{}", address.get_hostname().unwrap(), address.get_port());
+            debug!("start_a_connection_and_set_up_event_listeners:  Connected to {}:{}.", address.get_hostname().unwrap(), address.get_port());
             s
         },
         Err(_) => {
-            debug!("Failed to connect to {}:{}", address.get_hostname().unwrap(), address.get_port());
+            debug!("start_a_connection_and_set_up_event_listeners:  Failed to connect to {}:{}.", address.get_hostname().unwrap(), address.get_port());
             return
         },
     };
@@ -81,18 +81,18 @@ async fn start_a_connection_and_set_up_event_listeners(
     let context = glib::MainContext::default();
     context.spawn_local(async move {
         while let Some(data) = to_comms_manager.next().await {
-            debug!("Writing {:?}", &data);
+            debug!("start_a_connection_and_set_up_event_listenersWriting {:?}", &data);
             match writer.write_all(&data).await {
-                Ok(_) => { debug!("Successfully sent packet to amp {:?}", data); },
+                Ok(_) => { debug!("start_a_connection_and_set_up_event_listeners:  Successfully sent packet to amp {:?}.", data); },
                 Err(e) => {
                     // TODO Must think about showing disconnection in the UI when this happens.
-                    debug!("Error sending packet to amp {:?}", e);
+                    debug!("start_a_connection_and_set_up_event_listeners:  Error sending packet to amp {:?}.", e);
                 },
             };
         }
     });
     context.spawn_local(listen_to_reader(reader, to_control_window));
-    debug!("Set up connection to {:?}", address);
+    debug!("start_a_connection_and_set_up_event_listeners:  Set up connection to {:?}.", address);
 }
 
 /// Connect to an Arcam amp at the address given.
@@ -104,7 +104,7 @@ pub fn connect_to_amp(
     // TODO This appears to always connect when in fact it doesn't.
     //   Need to find a way of messaging the functionality and control_window as to
     //   whether a connection was actually made or not.
-    debug!("Connecting to {:?}:{:?}", address, port_number);
+    debug!("connect_to_amp:  Connecting to {:?}:{:?}.", address, port_number);
     let (tx_to_comms_manager, rx_to_comms_manager) = futures::channel::mpsc::channel(10);
     glib::MainContext::default().spawn_local(
         start_a_connection_and_set_up_event_listeners(

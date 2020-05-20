@@ -49,11 +49,11 @@ pub fn connect_to_amp(
     address: &str,
     port_number: u16
 ) -> Result<futures::channel::mpsc::Sender<Vec<u8>>, String> {
-    debug!("Connecting to {}:{}", address, port_number);
+    debug!("connect_to_amp:  Connecting to {}:{}.", address, port_number);
     let x = comms_manager::connect_to_amp(to_control_window, address, port_number);
     match &x {
-        Ok(y) => debug!("Got Ok result {:p}", y),
-        Err(e) => debug!("Got Err result – {:?}", e),
+        Ok(y) => debug!("connect_to_amp:  Got Ok result {:p}.", y),
+        Err(e) => debug!("connect_to_amp:  Got Err result – {:?}.", e),
     }
     x
 }
@@ -64,15 +64,15 @@ pub fn disconnect_from_amp() {
 }
 
 pub fn send_request_bytes(sender: &mut Sender<Vec<u8>>, request: &Vec<u8>) {
-    debug!("Send message to amp {:?}", request);
+    debug!("send_request_bytes:  Send message to amp {:?}.", request);
     match sender.try_send(request.to_vec()) {
         Ok(_) => {},
-        Err(e) => debug!("Failed to send packet – {:?}", e),
+        Err(e) => debug!("send_request_bytes:  Failed to send packet – {:?}.", e),
     }
 }
 
 pub fn send_request(sender: &mut Sender<Vec<u8>>, request: &Request) {
-    debug!("Send message to amp {:?}", request);
+    debug!("send_request:  Send message to amp {:?}.", request);
     send_request_bytes(sender, &request.to_bytes());
 }
 
@@ -200,7 +200,7 @@ pub fn initialise_control_window(sender: &mut Sender<Vec<u8>>) {
 }
 
 fn handle_response(control_window: &Rc<ControlWindow>, response: &Response) {
-    debug!("Dealing with response {:?}", response);
+    debug!("handle_response:  Dealing with response {:?}.", response);
     // TODO Deal with non-StatusUpdate packets.
     assert_eq!(response.ac, AnswerCode::StatusUpdate);
     match response.cc {
@@ -233,45 +233,49 @@ fn handle_response(control_window: &Rc<ControlWindow>, response: &Response) {
             assert_eq!(response.data.len(), 16);
             let message = match String::from_utf8(response.data.clone()) {
                 Ok(s) => s.trim().to_string(),
-                Err(e) => { debug!("Failed to process {:?} – {:?}", &response.data, e); "".to_string()},
+                Err(e) => { debug!("handle_response:  Failed to process {:?} – {:?}.", &response.data, e); "".to_string()},
             };
-            debug!("Got the station type: {}", message);
+            debug!("handle_response:  Got the station type: {}.", message);
             control_window.set_music_type_display(&message);
         }
         Command::RequestRDSDLSInformation => {
             assert_eq!(response.data.len(), 129);
             let index_of_nul = match response.data.iter().position(|x| *x == 0u8) {
                 Some(i) => i,
-                None => { debug!("Failed to find a nul character in the array."); 129 },
+                None => { debug!("handle_response:  Failed to find a nul character in the array."); 129 },
             };
             let message = match String::from_utf8(response.data[1..index_of_nul].to_vec()) {
                 Ok(s) => s.trim().to_string(),
-                Err(e) => { debug!("Failed to get a string – {}", e); "".to_string() },
+                Err(e) => { debug!("Fhandle_response:  ailed to get a string – {}.", e); "".to_string() },
             };
-            debug!("functionality::handle_response: got the RDS DLS: {}", message);
+            debug!("functionality::handle_response: got the RDS DLS: {}.", message);
             control_window.set_rds_dls(&message);
         }
         Command::RequestCurrentSource => {
             assert_eq!(response.data.len(), 1);
             control_window.set_source_display(response.zone, FromPrimitive::from_u8(response.data[0]).unwrap());
         },
-        x => debug!("Failed to deal with command {:?}", x),
+        Command::SimulateRC5IRCommand => {
+            assert_eq!(response.data.len(), 2);
+            debug!("handle_response:  Got response for RC5 command {:?}.", RC5Command::from(&response.data));
+        },
+        x => debug!("handle_response:  Failed to deal with command {:?}.", x),
     };
     control_window.set_connect_display(ConnectedState::Connected);
 }
 
 pub fn try_parse_of_response_data(control_window: &Rc<ControlWindow>, queue: &mut Vec<u8>) -> bool {
-    debug!("Starting parse on queue: {:?}", &queue);
+    debug!("try_parse_of_response_data:  Starting parse on queue: {:?}.", &queue);
     match Response::parse_bytes(&queue) {
         Ok((response, count)) => {
-            debug!("Got a successful parse of a packet. {:?}", response);
+            debug!("try_parse_of_response_data:  Got a successful parse of a packet – {:?}.", response);
             for _ in 0..count { queue.remove(0); }
-            debug!("Updated buffer {:?}", queue);
+            debug!("try_parse_of_response_data:  Updated buffer – {:?}.", queue);
             handle_response(control_window, &response);
             true
         },
         Err(e) => {
-            debug!("Failed to parse a packet from {:?}.", queue);
+            debug!("try_parse_of_response_data:  Failed to parse a packet from {:?}.", queue);
             match e {
                 "Insufficient bytes to form a packet." => {},
                 _ => panic!("XXXXX {}", e),

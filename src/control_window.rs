@@ -205,9 +205,7 @@ impl ControlWindow {
                 for c in datum.iter() {
                     queue.push(*c);
                 }
-                while functionality::try_parse_of_response_data(&c_w, &mut queue) {
-                    debug!("Got a good packet.");
-                }
+                while functionality::try_parse_of_response_data(&c_w, &mut queue) {}
                 Continue(true)
             }
         });
@@ -235,7 +233,7 @@ impl ControlWindow {
                                     Some(p) => p,
                                     None => 50000
                                 };
-                                debug!("Connect to {}:{}", &address, p_n);
+                                debug!("Connect to {}:{}.", &address, p_n);
                                 match functionality::connect_to_amp(
                                     &tx_from_comms_manager,
                                     &address.to_string(),
@@ -245,9 +243,9 @@ impl ControlWindow {
                                         //  TODO How come a mutable borrow works here?
                                         //  TODO Why is the argument to replace here not an Option?
                                         c_w.to_comms_manager.borrow_mut().replace(s);
-                                        debug!("Connected to amp at {}:{}", address, p_n);
+                                        debug!("Connected to amp at {}:{}.", address, p_n);
                                     },
-                                    Err(e) => debug!("Failed to connect to amp – {:?}", e),
+                                    Err(e) => debug!("Failed to connect to amp – {:?}.", e),
                                 };
                                 functionality::initialise_control_window(&mut c_w.get_to_comms_manager());
                             }
@@ -353,7 +351,7 @@ impl ControlWindow {
     }
 
     pub fn set_brightness_display(self: &Self, level: Brightness) {
-        let brightness_id= format!("{:?}", level);
+        let brightness_id= level.to_string();
         self.brightness_display.set_text(&brightness_id);
         if self.brightness_chooser.get_active_id().unwrap() != brightness_id {
             self.brightness_chooser.set_active_id(Some(&brightness_id));
