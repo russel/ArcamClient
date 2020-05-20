@@ -22,6 +22,8 @@ use gio::prelude::*;
 use gtk;
 // use gtk::prelude::*;
 
+use env_logger;
+
 mod about;
 mod arcam_protocol;
 mod comms_manager;
@@ -31,6 +33,7 @@ mod socket_support;
 
 #[cfg(not(test))]
 fn main() {
+    env_logger::init();
     let application = gtk::Application::new(Some("uk.org.russel.arcamclient"), gio::ApplicationFlags::empty()).expect("Application creation failed");
     glib::set_application_name("ArcamClient");
     application.connect_startup(move |app| {

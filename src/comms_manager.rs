@@ -27,6 +27,8 @@ use futures::AsyncReadExt;
 use futures::AsyncWriteExt;
 use futures::StreamExt;
 
+use log::debug;
+
 use crate::socket_support::{SocketClient, SocketConnection};
 
 async fn listen_to_reader(
@@ -36,16 +38,16 @@ async fn listen_to_reader(
     // TODO should the byte sequence parsing happen here or elsewhere?
     let mut queue: Vec<u8> = vec![];
     let mut buffer = [0u8; 256];
-    eprintln!("comms_manager::listen_to_reader: entering listen loop");
+    debug!("Entering listen loop");
     loop {
         // TODO How to disconnect this listener when the connection is closed?
         let count = match reader.read(&mut buffer).await {
             Ok(s) => {
-                eprintln!("comms_manager::listen_to_reader: got a packet: {:?}", &buffer[..s]);
+                debug!("Got a packet: {:?}", &buffer[..s]);
                 s
             },
             Err(e) => {
-                eprintln!("comms_manager::listen_to_reader: failed to read – {:?}", e);
+                debug!("Failed to read – {:?}", e);
                 0
             },
         };
@@ -53,7 +55,7 @@ async fn listen_to_reader(
         if count == 0 { break; }
         match from_comms_manager.send(buffer[..count].to_vec()) {
             Ok(_) => {},
-            Err(e) => eprintln!("comms_manager::listen_to_reader: failed to send packet – {:?}.", e),
+            Err(e) => debug!("Failed to send packet – {:?}.", e),
         };
     }
 }
@@ -63,15 +65,15 @@ async fn start_a_connection_and_set_up_event_listeners(
     mut to_comms_manager: futures::channel::mpsc::Receiver<Vec<u8>>,
     address: gio::NetworkAddress,
 ) {
-    eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: setting up connection to {}:{}", address.get_hostname().unwrap(), address.get_port());
+    debug!("Setting up connection to {}:{}", address.get_hostname().unwrap(), address.get_port());
     let client = SocketClient::new();
     let connection = match client.connect(&address).await {
         Ok(s) => {
-            eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: connected to {}:{}", address.get_hostname().unwrap(), address.get_port());
+            debug!("Connected to {}:{}", address.get_hostname().unwrap(), address.get_port());
             s
         },
         Err(_) => {
-            eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: failed to connect to {}:{}", address.get_hostname().unwrap(), address.get_port());
+            debug!("Failed to connect to {}:{}", address.get_hostname().unwrap(), address.get_port());
             return
         },
     };
@@ -79,18 +81,18 @@ async fn start_a_connection_and_set_up_event_listeners(
     let context = glib::MainContext::default();
     context.spawn_local(async move {
         while let Some(data) = to_comms_manager.next().await {
-            eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: writing {:?}", &data);
+            debug!("Writing {:?}", &data);
             match writer.write_all(&data).await {
-                Ok(_) => { eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: successfully sent packet to amp {:?}", data); },
+                Ok(_) => { debug!("Successfully sent packet to amp {:?}", data); },
                 Err(e) => {
                     // TODO Must think about showing disconnection in the UI when this happens.
-                    eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: error sending packet to amp {:?}", e);
+                    debug!("Error sending packet to amp {:?}", e);
                 },
             };
         }
     });
     context.spawn_local(listen_to_reader(reader, to_control_window));
-    eprintln!("comms_manager::start_a_connection_and_set_up_event_listeners: set up connection to {:?}", address);
+    debug!("Set up connection to {:?}", address);
 }
 
 /// Connect to an Arcam amp at the address given.
@@ -102,7 +104,7 @@ pub fn connect_to_amp(
     // TODO This appears to always connect when in fact it doesn't.
     //   Need to find a way of messaging the functionality and control_window as to
     //   whether a connection was actually made or not.
-    eprintln!("comms_manager::connect_to_amp: connecting to {:?}:{:?}", address, port_number);
+    debug!("Connecting to {:?}:{:?}", address, port_number);
     let (tx_to_comms_manager, rx_to_comms_manager) = futures::channel::mpsc::channel(10);
     glib::MainContext::default().spawn_local(
         start_a_connection_and_set_up_event_listeners(

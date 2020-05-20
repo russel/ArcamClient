@@ -67,7 +67,7 @@ fn communications_test() {
         // Run the tests.
         //
         // Currently there is an assumption of synchronous request/response. A real
-        // AVR 850 does not provide such a  guarantee, the question is whether the
+        // AVR 850 does not provide such a guarantee, the question is whether the
         // mock AVR850 does.
         glib::MainContext::default().spawn_local({
             let a = app.clone();

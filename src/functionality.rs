@@ -30,6 +30,8 @@ use gtk::prelude::*;
 
 use futures::channel::mpsc::Sender;
 
+use log::debug;
+
 use num_derive::FromPrimitive;  // Apparently unused, but it is necessary.
 use num_traits::FromPrimitive;
 
@@ -47,11 +49,11 @@ pub fn connect_to_amp(
     address: &str,
     port_number: u16
 ) -> Result<futures::channel::mpsc::Sender<Vec<u8>>, String> {
-    eprintln!("functionality::connect_to_amp: connecting to {}:{}", address, port_number);
+    debug!("Connecting to {}:{}", address, port_number);
     let x = comms_manager::connect_to_amp(to_control_window, address, port_number);
     match &x {
-        Ok(y) => eprintln!("functionality::connect_to_amp: got Ok result {:p}", y),
-        Err(e) => eprintln!("functionality::connect_to_amp: got Err result – {:?}", e),
+        Ok(y) => debug!("Got Ok result {:p}", y),
+        Err(e) => debug!("Got Err result – {:?}", e),
     }
     x
 }
@@ -62,26 +64,24 @@ pub fn disconnect_from_amp() {
 }
 
 pub fn send_request_bytes(sender: &mut Sender<Vec<u8>>, request: &Vec<u8>) {
-    eprintln!("functionality::send_request: send message to amp {:?}", request);
+    debug!("Send message to amp {:?}", request);
     match sender.try_send(request.to_vec()) {
         Ok(_) => {},
-        Err(e) => eprintln!("functionality::send_request_bytes: failed to send packet – {:?}", e),
+        Err(e) => debug!("Failed to send packet – {:?}", e),
     }
 }
 
 pub fn send_request(sender: &mut Sender<Vec<u8>>, request: &Request) {
-    eprintln!("functionality::send_request: send message to amp {:?}", request);
+    debug!("Send message to amp {:?}", request);
     send_request_bytes(sender, &request.to_bytes());
 }
 
 pub fn get_brightness_from_amp(sender: &mut Sender<Vec<u8>>) {
-    let request = Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_VALUE]).unwrap();
-    send_request(sender, &request);
+    send_request(sender, &Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_VALUE]).unwrap());
 }
 
 pub fn get_power_from_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber) {
-    let request = Request::new(zone, Command::Power, vec![REQUEST_VALUE]).unwrap();
-    send_request(sender, &request);
+    send_request(sender, &Request::new(zone, Command::Power, vec![REQUEST_VALUE]).unwrap());
 }
 
 pub fn set_power_on_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber, power: PowerState) {
@@ -92,15 +92,36 @@ pub fn set_power_on_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber, power: P
             if power == PowerState::On { RC5Command::Zone2PowerOn } else { RC5Command::Zone2PowerOff }
         }
     );
-    let data = vec![rc5_data.0, rc5_data.1];
-    let request = Request::new(zone, Command::SimulateRC5IRCommand, data).unwrap();
-    send_request(sender, &request);
-    get_power_from_amp(sender, zone);
+    send_request(sender, &Request::new(zone, Command::SimulateRC5IRCommand, vec![rc5_data.0, rc5_data.1]).unwrap());
+}
+
+pub fn get_volume_from_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber) {
+    send_request(sender, &Request::new(zone, Command::SetRequestVolume, vec![REQUEST_VALUE]).unwrap());
+}
+
+pub fn set_volume_on_amp(sender: &mut Sender<Vec<u8>>, zone:ZoneNumber, value: f64) {
+    let volume = value as u8;
+    assert!(volume < 100);
+    send_request(sender, &Request::new(zone, Command::SetRequestVolume, vec![volume]).unwrap());
+}
+
+pub fn get_mute_from_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber) {
+    send_request(sender, &Request::new(zone, Command::RequestMuteStatus, vec![REQUEST_VALUE]).unwrap());
+}
+
+pub fn set_mute_on_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber, mute: MuteState) {
+    let rc5_data = get_rc5command_data(
+        if zone == ZoneNumber::One {
+            if mute == MuteState::Muted { RC5Command::MuteOn } else { RC5Command::MuteOff }
+        } else {
+            if mute == MuteState::Muted { RC5Command::Zone2MuteOn } else { RC5Command::Zone2MuteOff }
+        }
+    );
+    send_request(sender, &Request::new(zone, Command::SimulateRC5IRCommand, vec![rc5_data.0, rc5_data.1]).unwrap());
 }
 
 pub fn get_source_from_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber) {
-    let request = Request::new(zone, Command::RequestCurrentSource, vec![REQUEST_VALUE]).unwrap();
-    send_request(sender, &request);
+    send_request(sender, &Request::new(zone, Command::RequestCurrentSource, vec![REQUEST_VALUE]).unwrap());
 }
 
 pub fn set_source_on_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber, source: Source) {
@@ -122,91 +143,64 @@ pub fn set_source_on_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber, source:
         Source::GAME => RC5Command::Game,
     };
     let rc5_data = get_rc5command_data(rc5_command);
-    let data = vec![rc5_data.0, rc5_data.1];
-    let request = Request::new(zone, Command::SimulateRC5IRCommand, data).unwrap();
-    send_request(sender, &request);
-    get_source_from_amp(sender, zone);
-}
-
-
-pub fn get_mute_from_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber) {
-    let request = Request::new(zone, Command::RequestMuteStatus, vec![REQUEST_VALUE]).unwrap();
-    send_request(sender, &request);
-}
-
-pub fn set_mute_on_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber, mute: MuteState) {
-    let rc5_data = get_rc5command_data(
-        if zone == ZoneNumber::One {
-            if mute == MuteState::Muted { RC5Command::MuteOn } else { RC5Command::MuteOff }
-        } else {
-            if mute == MuteState::Muted { RC5Command::Zone2MuteOn } else { RC5Command::Zone2MuteOff }
-        }
-    );
-    let data = vec![rc5_data.0, rc5_data.1];
-    let request = Request::new(zone, Command::SimulateRC5IRCommand, data).unwrap();
-    send_request(sender, &request);
-    get_mute_from_amp(sender, zone);
-}
-
-pub fn get_volume_from_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber) {
-    let request = Request::new(zone, Command::SetRequestVolume, vec![REQUEST_VALUE]).unwrap();
-    send_request(sender, &request);
-}
-
-pub fn set_volume_on_amp(sender: &mut Sender<Vec<u8>>, zone:ZoneNumber, value: f64) {
-    let volume = value as u8;
-    assert!(volume < 100);
-    let request = Request::new(zone, Command::SetRequestVolume, vec![volume]).unwrap();
-    send_request(sender, &request);
+    send_request(sender, &Request::new(zone, Command::SimulateRC5IRCommand, vec![rc5_data.0, rc5_data.1]).unwrap());
 }
 
 pub fn initialise_control_window(sender: &mut Sender<Vec<u8>>) {
-    // Experimental evidence indicates that a real AVR 850 cannot deal with six requests
-    // being thrown at it quickly. It seems that it can cope with sending two at a time
-    // with a short gap.
-    glib::idle_add_local({
+    // Experimental evidence indicates that a real AVR 850 cannot deal with requests
+    // being thrown at it quickly. Must send each request with a small gap. The gap
+    // has been ascertained by experiment rather than guesswork: 150 ms seems
+    // insufficient, 175 ms appears to work.
+    glib::timeout_add_local(175, {
         let mut s = sender.clone();
+        let mut count = -1;
         move || {
-            get_brightness_from_amp(&mut s);
-            get_power_from_amp(&mut s, ZoneNumber::One);
-            get_power_from_amp(&mut s, ZoneNumber::Two);
-            Continue(false)
-        }
-    });
-    glib::timeout_add_local(250, {
-        let mut s = sender.clone();
-        let mut first_run = true;
-        move || {
-            if first_run {
-                first_run = false;
-                Continue(true)
-            } else {
-                get_source_from_amp(&mut s, ZoneNumber::One);
-                get_volume_from_amp(&mut s, ZoneNumber::One);
-                get_mute_from_amp(&mut s, ZoneNumber::One);
-                Continue(false)
-            }
-        }
-    });
-    glib::timeout_add_local(500, {
-        let mut s = sender.clone();
-        let mut first_run = true;
-        move || {
-            if first_run {
-                first_run = false;
-                Continue(true)
-            } else {
-                get_source_from_amp(&mut s, ZoneNumber::Two);
-                get_volume_from_amp(&mut s, ZoneNumber::Two);
-                get_mute_from_amp(&mut s, ZoneNumber::Two);
-                Continue(false)
+            count += 1;
+            match count {
+                0 => {
+                    get_brightness_from_amp(&mut s);
+                    Continue(true)
+                },
+                1 => {
+                    get_power_from_amp(&mut s, ZoneNumber::One);
+                    Continue(true)
+                },
+                2=> {
+                    get_power_from_amp(&mut s, ZoneNumber::Two);
+                    Continue(true)
+                },
+                3 => {
+                    get_volume_from_amp(&mut s, ZoneNumber::One);
+                    Continue(true)
+                },
+                4 => {
+                    get_volume_from_amp(&mut s, ZoneNumber::Two);
+                    Continue(true)
+                },
+                5 => {
+                    get_mute_from_amp(&mut s, ZoneNumber::One);
+                    Continue(true)
+                },
+                6 => {
+                    get_mute_from_amp(&mut s, ZoneNumber::Two);
+                    Continue(true)
+                },
+                7 => {
+                    get_source_from_amp(&mut s, ZoneNumber::One);
+                    Continue(true)
+                },
+                8 => {
+                    get_source_from_amp(&mut s, ZoneNumber::Two);
+                    Continue(false)
+                },
+                _ => Continue(false),
             }
         }
     });
 }
 
 fn handle_response(control_window: &Rc<ControlWindow>, response: &Response) {
-    eprintln!("functionality::handle_response: dealing with response {:?}", response);
+    debug!("Dealing with response {:?}", response);
     // TODO Deal with non-StatusUpdate packets.
     assert_eq!(response.ac, AnswerCode::StatusUpdate);
     match response.cc {
@@ -230,54 +224,54 @@ fn handle_response(control_window: &Rc<ControlWindow>, response: &Response) {
             assert_eq!(response.data.len(), 16);
             let message = match String::from_utf8(response.data.clone()) {
                 Ok(s) => s.trim().to_string(),
-                Err(e) => { eprintln!("functionality::handle_response: failed to process {:?} – {:?}", &response.data, e); "".to_string()},
+                Err(e) => { debug!("Failed to process {:?} – {:?}", &response.data, e); "".to_string() },
             };
-            eprintln!("functionality::handle_response: got the station name: {}", message);
+            debug!("Got the station name: {}", message);
             control_window.set_radio_station_display(&message);
         }
         Command::ProgrammeTypeCategory => {
             assert_eq!(response.data.len(), 16);
             let message = match String::from_utf8(response.data.clone()) {
                 Ok(s) => s.trim().to_string(),
-                Err(e) => { eprintln!("functionality::handle_response: failed to process {:?} – {:?}", &response.data, e); "".to_string()},
+                Err(e) => { debug!("Failed to process {:?} – {:?}", &response.data, e); "".to_string()},
             };
-            eprintln!("functionality::handle_response: got the station type: {}", message);
+            debug!("Got the station type: {}", message);
             control_window.set_music_type_display(&message);
         }
         Command::RequestRDSDLSInformation => {
             assert_eq!(response.data.len(), 129);
             let index_of_nul = match response.data.iter().position(|x| *x == 0u8) {
                 Some(i) => i,
-                None => { eprintln!("functionality::handle_response: failed to find a nul character in the array."); 129 },
+                None => { debug!("Failed to find a nul character in the array."); 129 },
             };
             let message = match String::from_utf8(response.data[1..index_of_nul].to_vec()) {
                 Ok(s) => s.trim().to_string(),
-                Err(e) => { eprintln!("functionality::handle_response: failed to get a string – {}", e); "".to_string() },
+                Err(e) => { debug!("Failed to get a string – {}", e); "".to_string() },
             };
-            eprintln!("functionality::handle_response: got the RDS DLS: {}", message);
+            debug!("functionality::handle_response: got the RDS DLS: {}", message);
             control_window.set_rds_dls(&message);
         }
         Command::RequestCurrentSource => {
             assert_eq!(response.data.len(), 1);
             control_window.set_source_display(response.zone, FromPrimitive::from_u8(response.data[0]).unwrap());
         },
-        x => eprintln!("functionality::handle_response: failed to deal with command {:?}", x),
+        x => debug!("Failed to deal with command {:?}", x),
     };
     control_window.set_connect_display(ConnectedState::Connected);
 }
 
 pub fn try_parse_of_response_data(control_window: &Rc<ControlWindow>, queue: &mut Vec<u8>) -> bool {
-    eprintln!("functionality::try_parse_of_response_data: starting parse on queue: {:?}", &queue);
+    debug!("Starting parse on queue: {:?}", &queue);
     match Response::parse_bytes(&queue) {
         Ok((response, count)) => {
-            eprintln!("functionality::try_parse_of_response_data: got a successful parse of a packet. {:?}", response);
+            debug!("Got a successful parse of a packet. {:?}", response);
             for _ in 0..count { queue.remove(0); }
-            eprintln!("functionality::try_parse_of_response_data: updated buffer {:?}", queue);
+            debug!("Updated buffer {:?}", queue);
             handle_response(control_window, &response);
             true
         },
         Err(e) => {
-            eprintln!("functionality::try_parse_of_response_data: failed to parse a packet from {:?}.", queue);
+            debug!("Failed to parse a packet from {:?}.", queue);
             match e {
                 "Insufficient bytes to form a packet." => {},
                 _ => panic!("XXXXX {}", e),

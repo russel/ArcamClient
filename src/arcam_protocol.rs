@@ -26,6 +26,8 @@ The command PACKET_START (Remote Flow Control) is used to exchange request/respo
 
 use std::collections::HashMap;
 
+use log::debug;
+
 use lazy_static::lazy_static;
 
 use num_derive::FromPrimitive;  // Apparently unused, but it is necessary.

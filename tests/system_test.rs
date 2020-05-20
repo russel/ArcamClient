@@ -30,7 +30,7 @@ use gtk::prelude::*;
 use futures;
 use futures::StreamExt;
 
-use arcamclient::arcam_protocol::{AnswerCode, Brightness, Command, MuteState, PowerState, ZoneNumber};
+use arcamclient::arcam_protocol::{AnswerCode, Brightness, Command, MuteState, PowerState, Source, ZoneNumber};
 use arcamclient::comms_manager;
 use arcamclient::control_window::{ConnectedState, ControlWindow};
 use arcamclient::functionality;
@@ -46,8 +46,8 @@ fn system_test_with_mock_amp() {
         control_window.set_address("127.0.0.1");
         control_window.get_connect_chooser().set_active(true);
 
-        // Have to wait for long enough for all the activity of initialising to settle.
-        glib::timeout_add_local(650, {
+        // Have to wait for long enough for all the activity of initialising to settle. 1 s seems insufficient.
+        glib::timeout_add_local(1250, {
             let a = app.clone();
             let c_w = control_window.clone();
             let mut first_run = true;
@@ -64,9 +64,11 @@ fn system_test_with_mock_amp() {
                     assert_eq!(c_w.get_power_display_value(ZoneNumber::One), PowerState::On);
                     assert_eq!(c_w.get_volume_display_value(ZoneNumber::One), 30);
                     assert_eq!(c_w.get_mute_display_value(ZoneNumber::One), MuteState::NotMuted);
+                    assert_eq!(c_w.get_source_display_value(ZoneNumber::One), Source::CD);
                     assert_eq!(c_w.get_power_display_value(ZoneNumber::Two), PowerState::Standby);
                     assert_eq!(c_w.get_volume_display_value(ZoneNumber::Two), 20);
                     assert_eq!(c_w.get_mute_display_value(ZoneNumber::Two), MuteState::NotMuted);
+                    assert_eq!(c_w.get_source_display_value(ZoneNumber::Two), Source::FollowZone1);
 
                     glib::idle_add_local({
                         let aa = a.clone();
