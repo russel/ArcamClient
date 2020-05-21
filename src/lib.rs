@@ -17,7 +17,10 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-// Have this module so as to export the modules needed for the integration tests.
+// Have this module so as to export the modules needed for the integration tests. Also it is the
+// place where the crate level documentation is taken from.
+
+//! ArcamClient is a gtk-rs based Rust application for controlling Arcam amplifiers.
 
 pub mod about;
 pub mod arcam_protocol;
