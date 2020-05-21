@@ -17,6 +17,20 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+//! This module provides mechanisms for sending bytes to an amplifier and receiving bytes from
+//! an amplifier.
+//!
+//! Everything here is asynchronous communication with the amplifier. Communication into here
+//! and out of here is using channels. The channel for sending bytes from the amplifier to other
+//! code is provided via a call to the [connect_to_amp](fn.connect_to_amp.html) which returns
+//! the channel for sending bytes to the amplifier.
+//!
+//! There is no knowledge of the Arcam protocol here, everything is just byte sequences. The
+//! module [functionality](../functionality/index.html) has the functions that transform Arcam
+//! [Requests](../arcam_protocol/struct.Request.html) into byte sequences that can be sent by by
+//! code here and the functions that parse byte sequences into Arcam
+//! [Response](../arcam_protocol/struct.Response.html)s.
+
 use gio;
 use gio::prelude::*;
 use glib;

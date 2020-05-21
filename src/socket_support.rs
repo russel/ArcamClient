@@ -1,6 +1,8 @@
 /*
  *  Proposal from Sebastian Dröge  to provide a more Rust-y API to GIO sockets in gtk-rs.
  *  See  https://github.com/gtk-rs/gio/issues/293
+ *
+ * This code will eventually find its way into the gio module of gtk-rs.
  */
 
 use std::future::Future;
@@ -159,4 +161,3 @@ impl<'a> Stream for Incoming<'a> {
         Poll::Ready(Some(Ok(socket)))
     }
 }
-

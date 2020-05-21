@@ -17,35 +17,36 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*!
- * The Arcam manual states that each Arcam amplifier that has an Ethernet connection can be
- * connected to using port 50000 (AVR850, 50001 for AVR600). The amplifier responds to
- * messages "AMX" by sending an AMXB response. Otherwise communication is via packets with
- * well defined structures.  Each packet starts with 0x21 (!) and ends with 0x0d (\r).
- *
- * Request packets sent to the amplifier are structured:
- *
- * - St (Start transmission): 0x21 (‘!’)
- * - Zn (Zone number): 0x1, 0x2 for the zone number
- * - Cc (Command code): the code for the command
- * - Dl (Data Length): the number of data items following this item, excluding the Et
- * - Data: the parameters for the response of length n. n is limited to 255
- * - Et (End transmission): 0x0d (\r)
- *
- * Response packet sent by the amplifier are structured:
- *
- * - St (Start transmission): 0x21 (‘!’)
- * - Zn (Zone number): 0x1, 0x2 for the zone number
- * - Cc (Command code): the code for the command
- * - Ac (Answer code): the answer code for the request
- * - Dl (Data Length): the number of data items following this item, excluding the Et
- * - Data: the parameters for the response of length n. n is limited to 255
- * - Et (End transmission): 0x0d (\r)
- *
- * Communication is not synchronous: the amplifier receives request packets and within
- * 3 seconds will send a response packet. There is no guarantee that the response order
- * will be the request order, but it normal circumstances it probably will be.
- */
+//! This module provides various enums and structs to do with implementing the Arcam protocol
+//! for communicating with an Arcam amplifier over a TCP connection.
+//!
+//! The Arcam manual states that each Arcam amplifier that has an Ethernet connection can be
+//! connected to using port 50000 (AVR850, 50001 for AVR600). The amplifier responds to messages
+//! "AMX" by sending an AMXB response. Otherwise communication is via packets with well defined
+//! structures.  Each packet starts with 0x21 (!) and ends with 0x0d (\r).
+//!
+//! Request packets sent to the amplifier are structured:
+//!
+//! - St (Start transmission): 0x21 (‘!’)
+//! - Zn (Zone number): 0x1, 0x2 for the zone number
+//! - Cc (Command code): the code for the command
+//! - Dl (Data Length): the number of data items following this item, excluding the Et
+//! - Data: the parameters for the response of length n. n is limited to 255
+//! - Et (End transmission): 0x0d (\r)
+//!
+//! Response packet sent by the amplifier are structured:
+//!
+//! - St (Start transmission): 0x21 (‘!’)
+//! - Zn (Zone number): 0x1, 0x2 for the zone number
+//! - Cc (Command code): the code for the command
+//! - Ac (Answer code): the answer code for the request
+//! - Dl (Data Length): the number of data items following this item, excluding the Et
+//! - Data: the parameters for the response of length n. n is limited to 255
+//! - Et (End transmission): 0x0d (\r)
+//!
+//! Communication is not synchronous: the amplifier receives request packets and within 3
+//! seconds will send a response packet. There is no guarantee that the response order will be
+//! the request order, but it normal circumstances it probably will be.
 
 use std::collections::HashMap;
 use std::fmt;
@@ -137,14 +138,16 @@ pub enum Command {
     Reboot = 0x26,  // In AVR850, not in AVR600
 }
 
-/// The RC5 commands used via the `SimulateRC5IRCommand` command.
-// The values of these variants are pairs of u8 values. Python and D can handle this
-// directly, but it seems that Rust cannot. Thus, define the variants and the values
-// separately. :-(
+/// The RC5 commands used via the `SimulateRC5IRCommand` [Command](enum.Command.html).
+///
+/// The values of these variants are pairs of `u8` values. Python and D can handle enum variants
+/// being tuples, but it seems that Rust cannot. Thus, define the variants and the values
+/// separately. :-(
+///
+///The order of the variants is as it is written in the table of the documentation.  It is
+/// neither numeric order nor function order.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum RC5Command {
-    // The order is as it is written in the table of the documentation.
-    // it is neither numeric order nor function order.
     Standby,
     One,
     Two,
@@ -519,7 +522,7 @@ impl From<&Vec<u8>> for RC5Command {
     }
 }
 
-/// Accessor for the RC5 command data.
+/// Accessor for the [RC5Command](enum.RC5Command.html) variant values.
 // This is needed because lazy static values seemingly cannot be exported out of the
 // module to another module in the crate, or another crate.
 pub fn get_rc5command_data(rc5command: RC5Command) -> (u8, u8) {
@@ -570,7 +573,7 @@ impl From<&str> for Brightness {
 
 /// The various sources the amplifier can use.
 ///
-/// Numeric representation as per the `RequestCurrentSource` command return value.
+/// Numeric representation as per the `RequestCurrentSource` [Command](enum.Command.html) return value.
 #[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
 #[repr(u8)]
 pub enum Source {
@@ -616,7 +619,7 @@ impl From<&str> for Source {
 
 /// The video sources.
 ///
-/// Numeric representation as per the `VideoSelection` command return value.
+/// Numeric representation as per the `VideoSelection` [Command](enum.Command.html) return value.
 #[derive(Copy, Clone, Debug, Eq, FromPrimitive, PartialEq)]
 #[repr(u8)]
 pub enum VideoSource {
@@ -631,7 +634,7 @@ pub enum VideoSource {
 
 /// An analogue of bool to represent the power state of a zone.
 ///
-/// Numeric representation as per `Power` command return value.
+/// Numeric representation as per `Power` [Command](enum.Command.html) return value.
 /// The UI needs a string representation and this avoids spelling errors.
 #[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
 #[repr(u8)]
@@ -679,7 +682,7 @@ impl From<PowerState> for bool {
 
 /// An analogue of bool to represent the mute state of a zone.
 ///
-/// Numeric representation as per the `RequestMuteState` command return value.
+/// Numeric representation as per the `RequestMuteState` [Command](enum.Command.html) return value.
 /// The UI needs a string representation and this avoids spelling errors.
 #[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
 #[repr(u8)]
@@ -743,28 +746,24 @@ pub struct Request {
 }
 
 impl Request {
-    /**
-     * Create a new request.
-     *
-     * The data value is restricted to being at most 255 bytes long.
-     */
+    /// Create a new request.
+    ///
+    /// The data value is restricted to being at most 255 bytes long.
     pub fn new(zone: ZoneNumber, cc: Command, data: Vec<u8>) -> Result<Self, &'static str> {
         if data.len() > 255 { Err("Cannot have more than 255 bytes as data.") }
         else { Ok(Self {zone, cc, data}) }
     }
 
-    /**
-     * Return the byte sequence representing this request.
-     *
-     * All requests are structured:
-     *
-     * - St (Start transmission): PACKET_START
-     * - Zn (Zone number): 0x1, 0x2 for the zone number
-     * - Cc (Command code): the code for the command
-     * - Dl (Data Length): the number of data items following this item, excluding the Et
-     * - Data: the parameters for the response of length n. n is limited to 255
-     * - Et (End transmission): PACKET_END
-     */
+    /// Return the byte sequence representing this request.
+    ///
+    /// All requests are structured:
+    ///
+    /// - St (Start transmission): PACKET_START
+    /// - Zn (Zone number): 0x1, 0x2 for the zone number
+    /// - Cc (Command code): the code for the command
+    /// - Dl (Data Length): the number of data items following this item, excluding the Et
+    /// - Data: the parameters for the response of length n. n is limited to 255
+    /// - Et (End transmission): PACKET_END
     pub fn to_bytes(self: &Self) -> Vec<u8> {
         let dl = self.data.len();
         if dl >= 256 { panic!("args array length not right."); }
@@ -774,19 +773,17 @@ impl Request {
         result
     }
 
-    /**
-     * Parse the bytes in the buffer to create a tuple representing a request and the
-     * number of bytes used for the request packet.
-     *
-     * All requests are structured:
-     *
-     * - St (Start transmission): PACKET_START
-     * - Zn (Zone number): 0x1, 0x2 for the zone number
-     * - Cc (Command code): the code for the command
-     * - Dl (Data Length): the number of data items following this item, excluding the Et
-     * - Data: the parameters for the response of length n. n is limited to 255
-     * - Et (End transmission): PACKET_END
-     */
+    /// Parse the bytes in the buffer to create a tuple representing a request and the
+    /// number of bytes used for the request packet.
+    ///
+    /// All requests are structured:
+    ///
+    /// - St (Start transmission): PACKET_START
+    /// - Zn (Zone number): 0x1, 0x2 for the zone number
+    /// - Cc (Command code): the code for the command
+    /// - Dl (Data Length): the number of data items following this item, excluding the Et
+    /// - Data: the parameters for the response of length n. n is limited to 255
+    /// - Et (End transmission): PACKET_END
     pub fn parse_bytes(buffer: &[u8]) -> Result<(Self, usize), &str> {
         let packet_length = buffer.len();
         if packet_length < 5 { return Err("Insufficient bytes to form a packet."); }
@@ -845,29 +842,25 @@ pub struct Response {
 }
 
 impl Response {
-    /**
-     * Create a new response.
-     *
-     * The data value is restricted to being at most 255 bytes long.
-     */
+    /// Create a new response.
+    ///
+    /// The data value is restricted to being at most 255 bytes long.
     pub fn new(zone: ZoneNumber, cc: Command, ac: AnswerCode, data: Vec<u8>) -> Result<Self, &'static str> {
         if data.len() > 255 { Err("data is too long for a response.") }
         else { Ok(Self{zone, cc, ac, data}) }
     }
 
-    /**
-     * Return the byte sequence representing this response.
-     *
-     * All responses are structured:
-     *
-     * - St (Start transmission): PACKET_START
-     * - Zn (Zone number): 0x1, 0x2 for the zone number
-     * - Cc (Command code): the code for the command
-     * - Ac (Answer code): the answer code for the request
-     * - Dl (Data Length): the number of data items following this item, excluding the Et
-     * - Data: the parameters for the response of length n. n is limited to 255
-     * - Et (End transmission): PACKET_END
-     */
+    /// Return the byte sequence representing this response.
+    ///
+    /// All responses are structured:
+    ///
+    /// - St (Start transmission): PACKET_START
+    /// - Zn (Zone number): 0x1, 0x2 for the zone number
+    /// - Cc (Command code): the code for the command
+    /// - Ac (Answer code): the answer code for the request
+    /// - Dl (Data Length): the number of data items following this item, excluding the Et
+    /// - Data: the parameters for the response of length n. n is limited to 255
+    /// - Et (End transmission): PACKET_END
     pub fn to_bytes(self: &Self) -> Vec<u8> {
         let dl = self.data.len();
         if dl >= 256 { panic!("data length not right."); }
@@ -877,20 +870,18 @@ impl Response {
         result
     }
 
-    /**
-     * Parse the bytes in the buffer to create a tuple representing a response and the
-     * number of bytes used for the request packet.
-     *
-     * All responses are structured;
-     *
-     * - St (Start transmission): PACKET_START ‘!’
-     * - Zn (Zone number): 0x1, 0x2 for the zone number
-     * - Cc (Command code): the code for the command
-     * - Ac (Answer code): the answer code for the request
-     * - Dl (Data Length): the number of data items following this item, excluding the ETR
-     * - Data: the parameters for the response of length n. n is limited to 255
-     * - Et (End transmission): PACKET_END
-     */
+    /// Parse the bytes in the buffer to create a tuple representing a response and the
+    /// number of bytes used for the request packet.
+    ///
+    /// All responses are structured;
+    ///
+    /// - St (Start transmission): PACKET_START ‘!’
+    /// - Zn (Zone number): 0x1, 0x2 for the zone number
+    /// - Cc (Command code): the code for the command
+    /// - Ac (Answer code): the answer code for the request
+    /// - Dl (Data Length): the number of data items following this item, excluding the ETR
+    /// - Data: the parameters for the response of length n. n is limited to 255
+    /// - Et (End transmission): PACKET_END
     pub fn parse_bytes(buffer: &[u8]) -> Result<(Self, usize), &'static str> {
         let packet_length = buffer.len();
         if packet_length < 6 { return Err("Insufficient bytes to form a packet."); }
@@ -922,7 +913,6 @@ impl Response {
     }
 }
 
-
 impl fmt::Debug for Response {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut ds = f.debug_struct("Request");
@@ -943,7 +933,6 @@ impl fmt::Debug for Response {
         ds.finish()
     }
 }
-
 
 #[cfg(test)]
 mod tests {

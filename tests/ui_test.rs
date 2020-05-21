@@ -43,8 +43,8 @@ fn ui_test() {
         // it is not 127.0.0.1 and yet is a loopback address. This ensures the UI state
         // initialisation required with no attempt to use a mock AVR850.
         control_window.set_address("127.0.0.2");
-        control_window.get_connect_chooser().set_active(true); // Won't se the state, so…
-        control_window.get_connect_display().set_text("Connected"); // …set it manually.
+        control_window.get_connect_chooser().set_active(true); // Won't set the display state, so…
+        control_window.get_connect_display().set_text(&control_window::ConnectedState::Connected.to_string()); // …set it manually.
         // Amend the state of the UI. Replace the channel to the comms manager with one
         // that we can use for checking the packets sent. This cuts off the comms manager
         // so that it's state no longer matters for the tests.

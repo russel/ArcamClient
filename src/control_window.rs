@@ -17,6 +17,9 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+//! This module provides all the structs, enums and functions associated with display and
+//! control of the UI.
+
 use std::borrow::BorrowMut; // Is this actually used?
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -82,6 +85,14 @@ impl From<ConnectedState> for bool {
     }
 }
 
+/// The struct holding all the "handles" to the UI components.
+///
+/// Some of the components are just display areas for showing the current state
+/// of the amplifier, some components are controllers for causing data to be sent
+/// to the amplifier to change the state.
+///
+/// This struct also keeps track of the send end of the channel down which to send
+/// data to be forwarded to the amplifier.
 pub struct ControlWindow {
     window: gtk::ApplicationWindow,
     address: gtk::Entry,
@@ -113,6 +124,11 @@ pub struct ControlWindow {
 }
 
 impl ControlWindow {
+    /// Create a new instance.
+    ///
+    /// Reads the Glade file, picks out all the UI bits there are "handles" for and
+    /// sets up all the event handlers for the events associates with the control
+    /// UI components.
     pub fn new(application: &gtk::Application, port_number: Option<u16>) -> Rc<Self> {
         let builder = gtk::Builder::new_from_string(include_str!("resources/arcamclient.glade"));
         let window: gtk::ApplicationWindow = builder.get_object("application_window").unwrap();
@@ -282,7 +298,7 @@ impl ControlWindow {
             let c_w = control_window.clone();
             move |button| {
                 if c_w.is_connected() {
-                    functionality::set_volume_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::One, button.get_value());
+                    functionality::set_volume_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::One, button.get_value() as u8);
                 }
             }
         });
@@ -314,7 +330,7 @@ impl ControlWindow {
             let c_w = control_window.clone();
             move |button| {
                 if c_w.is_connected() {
-                    functionality::set_volume_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::Two, button.get_value());
+                    functionality::set_volume_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::Two, button.get_value() as u8);
                 }
             }
         });
@@ -337,10 +353,12 @@ impl ControlWindow {
         control_window
     }
 
+    /// Accessor for the send end of the channel to send data to the amplifier via the comms manager.
     fn get_to_comms_manager(self: &Self) -> futures::channel::mpsc::Sender<Vec<u8>> {
         self.to_comms_manager.borrow().as_ref().unwrap().clone()
     }
 
+    /// Sets the value shown in the connect display UI component.
     pub fn set_connect_display(self: &Self, connected: ConnectedState) {
         let string_to_set = connected.to_string();
         self.connect_display.set_text(&string_to_set);
@@ -350,6 +368,7 @@ impl ControlWindow {
         }
     }
 
+    /// Sets the value shown in the brightness display UI component.
     pub fn set_brightness_display(self: &Self, level: Brightness) {
         let brightness_id= level.to_string();
         self.brightness_display.set_text(&brightness_id);
@@ -358,6 +377,7 @@ impl ControlWindow {
         }
     }
 
+    /// Sets the value shown in the zone specific power display UI component.
     pub fn set_power_display(self: &Self, zone: ZoneNumber, power: PowerState) {
         let text = power.to_string();
         let (power_display, power_chooser) = match zone {
@@ -371,6 +391,35 @@ impl ControlWindow {
         }
     }
 
+    /// Sets the value shown in the zone specific volume display UI component.
+    pub fn set_volume_display(self: &Self, zone: ZoneNumber, volume: u8) {
+        assert!(volume < 100);
+        let (volume_display, volume_chooser) = match zone {
+            ZoneNumber::One => (&self.zone_1_volume_display, &self.zone_1_volume_chooser),
+            ZoneNumber::Two => (&self.zone_2_volume_display, &self.zone_2_volume_chooser),
+        };
+        let text = volume.to_string();
+        volume_display.set_text(&text);
+        if volume_chooser.get_value() as u8 != volume {
+            volume_chooser.set_value(volume as f64);
+        }
+    }
+
+    /// Sets the value shown in the zone specific mute display UI component.
+    pub fn set_mute_display(self: &Self, zone: ZoneNumber, mute: MuteState) {
+        let text = mute.to_string();
+        let (mute_display, mute_chooser) = match zone {
+            ZoneNumber::One => (&self.zone_1_mute_display, &self.zone_1_mute_chooser),
+            ZoneNumber::Two => (&self.zone_2_mute_display, &self.zone_2_mute_chooser),
+        };
+        mute_display.set_text(&text);
+        let value: bool = mute.into();
+        if mute_chooser.get_active() != value {
+            mute_chooser.set_active(value);
+        }
+   }
+
+    /// Sets the value shown in the zone specific source display UI component.
     pub fn set_source_display(self: &Self, zone: ZoneNumber, source: Source) {
         let (source_display, source_chooser) = match zone {
             ZoneNumber::One => (&self.zone_1_source_display, &self.zone_1_source_chooser),
@@ -385,63 +434,35 @@ impl ControlWindow {
         }
     }
 
-    pub fn set_volume_display(self: &Self, zone: ZoneNumber, volume: f64) {
-        assert!(volume < 100.0);
-        let (volume_display, volume_chooser) = match zone {
-            ZoneNumber::One => (&self.zone_1_volume_display, &self.zone_1_volume_chooser),
-            ZoneNumber::Two => (&self.zone_2_volume_display, &self.zone_2_volume_chooser),
-        };
-        let text = volume.to_string();
-        volume_display.set_text(&text);
-        if volume_chooser.get_value() != volume {
-            volume_chooser.set_value(volume);
-        }
-    }
-
-    pub fn set_mute_display(self: &Self, zone: ZoneNumber, mute: MuteState) {
-        let text = mute.to_string();
-        let (mute_display, mute_chooser) = match zone {
-            ZoneNumber::One => (&self.zone_1_mute_display, &self.zone_1_mute_chooser),
-            ZoneNumber::Two => (&self.zone_2_mute_display, &self.zone_2_mute_chooser),
-        };
-        mute_display.set_text(&text);
-        let value: bool = mute.into();
-        if mute_chooser.get_active() != value {
-            mute_chooser.set_active(value);
-        }
-   }
-
+    /// Sets the value in the radio station name display UI component.
     pub fn set_radio_station_display(self: &Self, station: &str) {
         self.radio_station_display.set_text(station);
         self.radio_data.show();
     }
 
+    /// Sets the value in the music type display UI component.
     pub fn set_music_type_display(self: &Self, style: &str) {
         self.music_type_display.set_text(style);
         self.radio_data.show();
     }
 
+    /// Sets the value in the RDS DLS display UI component.
     pub fn set_rds_dls(self: &Self, text: &str) {
         self.rds_dls.set_text(text);
         self.radio_data.show();
     }
 
+    /// Accessor for the current value of the connect display UI component.
     pub fn get_connect_display_value(self: &Self) -> ConnectedState {
         self.connect_display.get_text().unwrap().as_str().into()
     }
 
-    pub fn get_source_display_value(self: &Self, zone: ZoneNumber) -> Source {
-        let source_display= match zone {
-            ZoneNumber::One => &self.zone_1_source_display,
-            ZoneNumber::Two => &self.zone_2_source_display,
-        };
-        source_display.get_text().unwrap().as_str().into()
-    }
-
+    /// Accessor for the current value of the brightness display UI component.
     pub fn get_brightness_display_value(self: &Self) -> Brightness {
         self.brightness_display.get_text().unwrap().as_str().into()
     }
 
+    /// Accessor for the current value of the zone specific power display UI component.
     pub fn get_power_display_value(self: &Self, zone: ZoneNumber) -> PowerState {
         match match zone {
             ZoneNumber::One => self.zone_1_power_display.get_text(),
@@ -452,7 +473,8 @@ impl ControlWindow {
         }
     }
 
-    pub fn get_volume_display_value(self: &Self, zone: ZoneNumber) -> u8 {
+    /// Accessor for the current value of the zone specific volume display UI component.
+   pub fn get_volume_display_value(self: &Self, zone: ZoneNumber) -> u8 {
         match match zone {
             ZoneNumber::One => self.zone_1_volume_display.get_text(),
             ZoneNumber::Two => self.zone_2_volume_display.get_text(),
@@ -465,6 +487,7 @@ impl ControlWindow {
         }
     }
 
+    /// Accessor for the current value of the zone specific mute display UI component.
     pub fn get_mute_display_value(self: &Self, zone: ZoneNumber) -> MuteState {
         match match zone {
             ZoneNumber::One => self.zone_1_mute_display.get_text(),
@@ -475,6 +498,18 @@ impl ControlWindow {
         }
     }
 
+    /// Accessor for the current value of the zone specific source display UI component.
+    pub fn get_source_display_value(self: &Self, zone: ZoneNumber) -> Source {
+        let source_display= match zone {
+            ZoneNumber::One => &self.zone_1_source_display,
+            ZoneNumber::Two => &self.zone_2_source_display,
+        };
+        source_display.get_text().unwrap().as_str().into()
+    }
+
+    /// Accessor for whether the client is connected to an amplifier – real or mock.
+    ///
+    /// In non-test situation, if there is no connection, a message dialogue is displayed.
     fn is_connected(self: &Self) -> bool {
         let rc: bool = self.get_connect_display_value().into();
         if !rc {
@@ -493,20 +528,25 @@ impl ControlWindow {
         rc
     }
 
-    //  Some methods needed for the integration tests.
+    //  Some methods needed for the integration tests that break the abstraction.
 
+    #[doc(hidden)]
     //  ui_test has to connect to a mock amp but without a mock amp.
     pub fn get_connect_display(self: &Self) -> gtk::Label { self.connect_display.clone() }
 
+    #[doc(hidden)]
     //  system_test and ui_test have to connect to a mock amp.
     pub fn get_connect_chooser(self: &Self) -> gtk::CheckButton { self.connect_chooser.clone() }
 
+    #[doc(hidden)]
     //  system_test and ui_test have to set the address.
     pub fn set_address(self: &Self, address: &str) { self.address.set_text(address); }
 
+    #[doc(hidden)]
     //  ui_test has to hack the state.
     pub fn get_to_comms_manager_field(self: &Self) -> &RefCell<Option<futures::channel::mpsc::Sender<Vec<u8>>>> { &self.to_comms_manager }
 
+    #[doc(hidden)]
     pub fn set_volume_chooser(self: &Self, zone: ZoneNumber, value: f64) {
         let item = match zone {
             ZoneNumber::One => &self.zone_1_volume_chooser,

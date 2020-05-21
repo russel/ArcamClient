@@ -79,7 +79,7 @@ fn communications_test() {
                     None => assert!(false, "Failed to get a value from the response queue."),
                 };
 
-                set_volume_on_amp(&mut sender, ZoneNumber::One, 20.0);
+                set_volume_on_amp(&mut sender, ZoneNumber::One, 20);
                 match rx_queue.next().await {
                     Some(s) => assert_eq!(s, Response::new(ZoneNumber::One, Command::SetRequestVolume, AnswerCode::StatusUpdate, vec![0x14]).unwrap().to_bytes()),
                     None => assert!(false, "Failed to get a value from the response queue."),

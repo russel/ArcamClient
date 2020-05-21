@@ -17,6 +17,8 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+//! This module provides the "about" dialogue for ArcamClient.
+
 use std::cell::Cell;
 use std::sync::Mutex;
 
@@ -32,6 +34,8 @@ lazy_static! {
     static ref ABOUT: Mutex<Cell<bool>> = Mutex::new(Cell::new(false));
 }
 
+/// Create the [AboutDialog](https://gtk-rs.org/docs/gtk/struct.AboutDialog.html) instance
+/// for ArcamClient.
 fn create() -> gtk::AboutDialog {
     let about = gtk::AboutDialog::new();
     let mut authors = Vec::<&str>::new();
