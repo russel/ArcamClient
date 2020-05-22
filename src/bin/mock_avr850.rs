@@ -57,12 +57,18 @@ On a channel change some packets got emitted:
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::env::args;
-use std::io::{Read, Write};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::str::from_utf8;
+use std::sync::Mutex;
 
 use log::debug;
 use env_logger;
+
+use async_std::io;
+use async_std::net::{TcpListener, TcpStream};
+use async_std::prelude::*;
+use async_std::task;
+
+use lazy_static::lazy_static;
 
 use num_traits::FromPrimitive;
 
@@ -113,8 +119,13 @@ impl Default for AmpState {
     }
 }
 
+lazy_static! {
+    static ref AMP_STATE: Mutex<AmpState> = Mutex::new(AmpState::default());
+}
+
 /// Return a response to a given request updating the state of the mock amp as needed.
-fn create_command_response(request: &Request, amp_state: &mut AmpState) -> Result<Response, String>{
+fn create_command_response(request: &Request) -> Result<Response, String>{
+    let amp_state = AMP_STATE.lock().unwrap();
     match request.cc {
         Command::Power => {
             assert_eq!(request.data.len(), 1);
@@ -250,86 +261,69 @@ fn create_command_response(request: &Request, amp_state: &mut AmpState) -> Resul
 }
 
 /// Handle a connection from a remote client.
-fn handle_client(stream: &mut TcpStream, amp_state: &mut AmpState) {
-    debug!("handle_client: got a connection from {}", stream.peer_addr().unwrap());
+///
+/// Read Request byte sequences as they arrive, parse them to create Requests
+/// and then send a Response as a real AVR850 might.
+async fn handle_a_connection(stream: TcpStream) -> io::Result<()> {
+    debug!("Accepted from: {}", stream.peer_addr()?);
+    let mut reader = stream.clone();
+    let mut writer = stream;
     loop {
-        let mut buffer = [0; 256];
-        match stream.read(&mut buffer) {
-            Ok(count) => {
-                if count > 0 {
-                    let mut data = &buffer[..count];
-                    debug!("handle_client: got a message {:?}", data);
-                    // TODO Assume each is a complete packet and only one packet.
-                    //   This may not be a good assumption even for the integration testing.
-                    // Remove the output so as to speed up processing which then gets multiple packets to the client very quickly.
-                    if data[0] == PACKET_START {
-                        debug!("handle_client: processing Arcam request {:?}", data);
-                        // TODO  How to deal with a buffer that has multiple packets?
-                        loop {
-                            match Request::parse_bytes(data) {
-                                Ok((request, count)) => {
-                                    data = &data[count..];
-                                    debug!("handle_client: got a parse of {:?}, data left {:?}", &request, &data);
-                                    debug!("handle_client: sending back {:?}", &create_command_response(&request, amp_state).unwrap());
-                                    stream.write(&create_command_response(&request, amp_state).unwrap().to_bytes())
-                                        .expect("handle_client: failed to write response");
-                                },
-                                Err(e) => {
-                                    debug!("handle_client: failed to parse an apparent Arcam request: {:?}, {:?}", data, e);
-                                    break;
-                                },
-                            }
-                        }
-                    } else {
-                        match from_utf8(data) {
-                            Ok(s) => {
-                                let message = s.trim();
-                                if message == "AMX" {
-                                    stream.write("AMXB<Device-SDKClass=Receiver><Device-Make=ARCAM><Device-Model=AVR850><Device-Revision=2.0.0>\r".as_bytes())
-                                        .expect("handle_client: failed to write AMX response");
-                                } else {
-                                    debug!("handle_client: unknown message, doing nothing.");
-                                }
-                            },
-                            Err(e) => debug!("handle_client: buffer is not a string: {:?}", e),
-                        }
+        let mut buffer = [0u8; 1024];
+        let read_count = reader.read(&mut buffer).await?;
+        if read_count == 0 {
+            debug!("handle_a_connection:  Connection read zero bytes, assuming a dropped connection.");
+            break;
+        }
+        let data = buffer[..read_count].to_vec();
+        if data[0] == PACKET_START {
+            match Request::parse_bytes(&data) {
+                Ok((request, count)) => {
+                    match create_command_response(&request) {
+                        Ok(response) => {
+                            debug!("handle_a_connection:  sending the response {:?}", &response);
+                            writer.write_all(&response.to_bytes()).await?;
+                        },
+                        Err(e) => debug!("handle_a_connection:  failed to process a request – {}", e),
                     }
-                } else {
-                    debug!("handle_client: no data read, assuming connection closed.");
-                    break;
-                }
-            },
-            Err(e) => {
-                debug!("handle_client: read error: {:?}", e);
-                break;
+                },
+                Err(e) => debug!("handle_a_connection:  failed to parse {:?} as a request – {}", &data, e),
+            }
+        } else {
+            match from_utf8(&data) {
+                Ok(s) => {
+                    let message = s.trim();
+                    if message == "AMX" {
+                        debug!("process_a_connection: sending AMX response");
+                        let amx_response = "AMXB<Device-SDKClass=Receiver><Device-Make=ARCAM><Device-Model=AVR850><Device-Revision=2.0.0>\r";
+                        writer.write_all(amx_response.as_bytes()).await?
+                    } else {
+                        debug!("process_a_connection: unknown message, doing nothing.");
+                    }
+                },
+                Err(e) => debug!("process_a_connection: buffer is not a string – {:?}", e),
             }
         }
     }
+    Ok(())
 }
 
-/// Create a mock amplifier and then listen for connections on the address provided.
+/// Listen on locahost:<port_number> for connections and process each one.
 ///
 /// Although a real AVR850 will only listen on port 50000, this simulator allows for any port to
 /// support integration testing – tests may have to run faster than ports become available so
 /// reusing the same port is not feasible.
-fn create_default_amp_then_listen_on(address: &SocketAddr) -> Result<(), ()> {
-    let mut amp_state: AmpState = Default::default();
-    match TcpListener::bind(address) {
-        Ok(listener) => {
-            debug!("create_default_amp_then_listen_on: server bound to {}", address);
-            for stream in listener.incoming() {
-                match stream {
-                    Ok(mut s) => handle_client(&mut s, &mut amp_state),
-                    Err(e) => debug!("create_default_amp_then_listen_on: failed to get incoming connection: {:?}", e),
-                }
-            }
-            Ok(())
-        },
-        Err(e) => {
-            debug!("create_default_amp_then_listen_on: failed to bind to {}: {:?}", address, e);
-            Err(())
-        }
+async fn set_up_listener(port_number: u16) -> io::Result<()> {
+    let listener = TcpListener::bind(&("127.0.0.1:".to_string() + &port_number.to_string())).await?;
+    debug!("set_up_listener:  Listening on {}", listener.local_addr()?);
+    let mut incoming = listener.incoming();
+    while let Some(stream) = incoming.next().await {
+        let stream = stream?;
+        task::spawn(async {
+            handle_a_connection(stream).await.unwrap();
+        });
     }
+    Ok(())
 }
 
 /// Start the mock AVR850.
@@ -338,19 +332,19 @@ fn create_default_amp_then_listen_on(address: &SocketAddr) -> Result<(), ()> {
 /// in order to support integration testing where using a single port number can lead to
 /// problems as a socket may not be closed as fast as new mocks are created. Testing must
 /// avoid "Unable to bind socket: Address already in use".
-fn main() -> Result<(), ()>{
+fn main() -> io::Result<()> {
     env_logger::init();
     let args: Vec<String> = args().collect();
-    debug!("main: args are {:?}", args);
+    debug!("main:  Args are {:?}", args);
     let default_port_number = 50000;
     let port_number = if args.len() > 1 { args[1].parse::<u16>().unwrap_or(default_port_number) } else { default_port_number };
-    create_default_amp_then_listen_on(&SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port_number))
+    task::block_on(set_up_listener(port_number))
 }
 
 #[cfg(test)]
 mod tests {
 
-    use super::{AmpState, create_command_response};
+    use super::{AmpState, AMP_STATE, create_command_response};
 
     use arcamclient::arcam_protocol::{
         AnswerCode, Brightness, Command, MuteState, PowerState, RC5Command, Request, Response, Source, ZoneNumber,
@@ -360,52 +354,47 @@ mod tests {
 
     #[test]
     fn get_display_brightness() {
-        let mut amp_state: AmpState = Default::default();
-        assert_eq!(amp_state.brightness.get(), Brightness::Level2);
+        assert_eq!(AMP_STATE.lock().unwrap().brightness.get(), Brightness::Level2);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_QUERY]).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_QUERY]).unwrap()).unwrap(),
             Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![Brightness::Level2 as u8]).unwrap());
-        assert_eq!(amp_state.brightness.get(), Brightness::Level2);
+        assert_eq!(AMP_STATE.lock().unwrap().brightness.get(), Brightness::Level2);
     }
 
     #[test]
     fn set_display_brightness_error() {
-        let mut amp_state: AmpState = Default::default();
-        assert_eq!(amp_state.brightness.get(), Brightness::Level2);
-        match create_command_response(&Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![Brightness::Level2 as u8]).unwrap(), &mut amp_state) {
+        assert_eq!(AMP_STATE.lock().unwrap().brightness.get(), Brightness::Level2);
+        match create_command_response(&Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![Brightness::Level2 as u8]).unwrap()) {
             Ok(_) => assert!(false),
             Err(e) => assert_eq!(e, "Incorrect DisplayBrightness command 2."),
         }
-        assert_eq!(amp_state.brightness.get(), Brightness::Level2);
+        assert_eq!(AMP_STATE.lock().unwrap().brightness.get(), Brightness::Level2);
     }
 
     #[test]
     fn set_display_brightness_using_rc5() {
-        let mut amp_state: AmpState = Default::default();
-        assert_eq!(amp_state.brightness.get(), Brightness::Level2);
+        assert_eq!(AMP_STATE.lock().unwrap().brightness.get(), Brightness::Level2);
         let rc5_data = get_rc5command_data(RC5Command::DisplayL1);
         let data = vec![rc5_data.0, rc5_data.1];
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::SimulateRC5IRCommand, data.clone()).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::One, Command::SimulateRC5IRCommand, data.clone()).unwrap()).unwrap(),
             Response::new(ZoneNumber::One, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, data).unwrap());
-        assert_eq!(amp_state.brightness.get(), Brightness::Level1);
+        assert_eq!(AMP_STATE.lock().unwrap().brightness.get(), Brightness::Level1);
     }
 
     #[test]
     fn get_zone_1_power() {
-        let mut amp_state: AmpState = Default::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::One].power.get(), PowerState::On);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::One].power.get(), PowerState::On);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::Power, vec![REQUEST_QUERY]).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::One, Command::Power, vec![REQUEST_QUERY]).unwrap()).unwrap(),
             Response::new(ZoneNumber::One, Command::Power, AnswerCode::StatusUpdate, vec![PowerState::On as u8]).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::One].power.get(), PowerState::On);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::One].power.get(), PowerState::On);
     }
 
     #[test]
     fn set_zone_1_power_error() {
-        let mut amp_state: AmpState = Default::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::One].power.get(), PowerState::On);
-        match create_command_response(&Request::new(ZoneNumber::One, Command::Power, vec![0x0]).unwrap(), &mut amp_state) {
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::One].power.get(), PowerState::On);
+        match create_command_response(&Request::new(ZoneNumber::One, Command::Power, vec![0x0]).unwrap()) {
             Ok(_) => assert!(false),
             Err(e) => assert_eq!(e, "Incorrect Power command 0."),
         }
@@ -413,53 +402,48 @@ mod tests {
 
     #[test]
     fn set_zone_1_power_using_rc5() {
-        let mut amp_state: AmpState = Default::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::One].power.get(), PowerState::On);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::One].power.get(), PowerState::On);
         let rc5_data = get_rc5command_data(RC5Command::PowerOff);
         let data = vec![rc5_data.0, rc5_data.1];
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::SimulateRC5IRCommand, data.clone()).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::One, Command::SimulateRC5IRCommand, data.clone()).unwrap()).unwrap(),
             Response::new(ZoneNumber::One, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, data).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::One].power.get(), PowerState::Standby);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::One].power.get(), PowerState::Standby);
     }
 
     #[test]
     fn get_zone_1_volume() {
-        let mut amp_state: AmpState = Default::default();
         let volume = 30u8;
-        assert_eq!(amp_state.zones[&ZoneNumber::One].volume.get(), volume);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::One].volume.get(), volume);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![REQUEST_QUERY]).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![REQUEST_QUERY]).unwrap()).unwrap(),
             Response::new(ZoneNumber::One, Command::SetRequestVolume, AnswerCode::StatusUpdate, vec![volume]).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::One].volume.get(), volume);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::One].volume.get(), volume);
     }
 
     #[test]
     fn set_zone_1_volume() {
-        let mut amp_state: AmpState = Default::default();
-        let volume = 15u8;
-        assert_eq!(amp_state.zones[&ZoneNumber::One].volume.get(), 30);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::One].volume.get(), 30);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![volume]).unwrap(), &mut amp_state).unwrap(),
-            Response::new(ZoneNumber::One, Command::SetRequestVolume, AnswerCode::StatusUpdate, vec![volume]).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::One].volume.get(), volume);
+            create_command_response(&Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![0x0f]).unwrap()).unwrap(),
+            Response::new(ZoneNumber::One, Command::SetRequestVolume, AnswerCode::StatusUpdate, vec![0x0f]).unwrap()
+        );
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::One].volume.get(), 15);
     }
 
     #[test]
     fn get_zone_1_mute() {
-        let mut amp_state: AmpState = Default::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::One].mute.get(), MuteState::NotMuted);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::One].mute.get(), MuteState::NotMuted);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::RequestMuteStatus, vec![REQUEST_QUERY]).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::One, Command::RequestMuteStatus, vec![REQUEST_QUERY]).unwrap()).unwrap(),
             Response::new(ZoneNumber::One, Command::RequestMuteStatus, AnswerCode::StatusUpdate, vec![MuteState::NotMuted as u8]).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::One].mute.get(), MuteState::NotMuted);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::One].mute.get(), MuteState::NotMuted);
     }
 
     #[test]
     fn set_zone_1_mute_error() {
-        let mut amp_state: AmpState = Default::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::One].mute.get(), MuteState::NotMuted);
-        match create_command_response(&Request::new(ZoneNumber::One, Command::RequestMuteStatus, vec![0x0]).unwrap(), &mut amp_state) {
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::One].mute.get(), MuteState::NotMuted);
+        match create_command_response(&Request::new(ZoneNumber::One, Command::RequestMuteStatus, vec![0x0]).unwrap()) {
             Ok(_) => assert!(false),
             Err(e) => assert_eq!(e, "Incorrect RequestMuteStatus command 0."),
         }
@@ -467,31 +451,28 @@ mod tests {
 
     #[test]
     fn set_zone_1_mute_using_rc5() {
-        let mut amp_state: AmpState = Default::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::One].mute.get(), MuteState::NotMuted);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::One].mute.get(), MuteState::NotMuted);
         let rc5_data = get_rc5command_data(RC5Command::MuteOn);
         let data = vec![rc5_data.0, rc5_data.1];
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::SimulateRC5IRCommand, data.clone()).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::One, Command::SimulateRC5IRCommand, data.clone()).unwrap()).unwrap(),
             Response::new(ZoneNumber::One, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, data).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::One].mute.get(), MuteState::Muted);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::One].mute.get(), MuteState::Muted);
     }
 
     #[test]
     fn get_zone_1_source() {
-        let mut amp_state: AmpState = Default::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::One].source.get(), Source::CD);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::One].source.get(), Source::CD);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap()).unwrap(),
             Response::new(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::CD as u8]).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::One].source.get(), Source::CD);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::One].source.get(), Source::CD);
     }
 
     #[test]
     fn set_zone_1_source_error() {
-        let mut amp_state: AmpState = Default::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::One].source.get(), Source::CD);
-        match create_command_response(&Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![Source::TUNER as u8]).unwrap(), &mut amp_state) {
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::One].source.get(), Source::CD);
+        match create_command_response(&Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![Source::TUNER as u8]).unwrap()) {
             Ok(_) => assert!(false),
             Err(e) => assert_eq!(e, "Incorrect RequestCurrentSource command 11."),
         }
@@ -499,32 +480,29 @@ mod tests {
 
     #[test]
     fn set_zone_1_source_using_rc5() {
-        let mut amp_state: AmpState = Default::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::One].source.get(), Source::CD);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::One].source.get(), Source::CD);
         let rc5_data = get_rc5command_data(RC5Command::BD);
         let data = vec![rc5_data.0, rc5_data.1];
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::SimulateRC5IRCommand, data.clone()).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::One, Command::SimulateRC5IRCommand, data.clone()).unwrap()).unwrap(),
             Response::new(ZoneNumber::One, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, data).unwrap()
         );
-        assert_eq!(amp_state.zones[&ZoneNumber::One].source.get(), Source::BD);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::One].source.get(), Source::BD);
     }
 
     #[test]
     fn get_zone_2_power() {
-        let mut amp_state: AmpState = Default::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].power.get(), PowerState::Standby);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::Two].power.get(), PowerState::Standby);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::Two, Command::Power, vec![REQUEST_QUERY]).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::Two, Command::Power, vec![REQUEST_QUERY]).unwrap()).unwrap(),
             Response::new(ZoneNumber::Two, Command::Power, AnswerCode::StatusUpdate, vec![PowerState::Standby as u8]).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].power.get(), PowerState::Standby);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::Two].power.get(), PowerState::Standby);
     }
 
     #[test]
     fn set_zone_2_power_error() {
-        let mut amp_state: AmpState = Default::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].power.get(), PowerState::Standby);
-        match create_command_response(&Request::new(ZoneNumber::Two, Command::Power, vec![0x0]).unwrap(), &mut amp_state) {
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::Two].power.get(), PowerState::Standby);
+        match create_command_response(&Request::new(ZoneNumber::Two, Command::Power, vec![0x0]).unwrap()) {
             Ok(_) => assert!(false),
             Err(e) => assert_eq!(e, "Incorrect Power command 0."),
         }
@@ -532,53 +510,48 @@ mod tests {
 
     #[test]
     fn set_zone_2_power_using_rc5() {
-        let mut amp_state: AmpState = Default::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].power.get(), PowerState::Standby);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::Two].power.get(), PowerState::Standby);
         let rc5_data = get_rc5command_data(RC5Command::Zone2PowerOn);
         let data = vec![rc5_data.0, rc5_data.1];
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, data.clone()).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, data.clone()).unwrap()).unwrap(),
             Response::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, data).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].power.get(), PowerState::On);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::Two].power.get(), PowerState::On);
     }
 
     #[test]
     fn get_zone_2_volume() {
-        let mut amp_state: AmpState = Default::default();
         let volume = 20u8;
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].volume.get(), volume);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::Two].volume.get(), volume);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::Two, Command::SetRequestVolume, vec![REQUEST_QUERY]).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::Two, Command::SetRequestVolume, vec![REQUEST_QUERY]).unwrap()).unwrap(),
             Response::new(ZoneNumber::Two, Command::SetRequestVolume, AnswerCode::StatusUpdate, vec![volume]).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].volume.get(), volume);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::Two].volume.get(), volume);
     }
 
     #[test]
     fn set_zone_2_volume() {
-        let mut amp_state: AmpState = Default::default();
         let volume = 15u8;
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].volume.get(), 20);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::Two].volume.get(), 20);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::Two, Command::SetRequestVolume, vec![volume]).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::Two, Command::SetRequestVolume, vec![volume]).unwrap()).unwrap(),
             Response::new(ZoneNumber::Two, Command::SetRequestVolume, AnswerCode::StatusUpdate, vec![volume]).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].volume.get(), volume);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::Two].volume.get(), volume);
     }
 
     #[test]
     fn get_zone_2_mute() {
-        let mut amp_state: AmpState = Default::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].mute.get(), MuteState::NotMuted);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::Two].mute.get(), MuteState::NotMuted);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::Two, Command::RequestMuteStatus, vec![REQUEST_QUERY]).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::Two, Command::RequestMuteStatus, vec![REQUEST_QUERY]).unwrap()).unwrap(),
             Response::new(ZoneNumber::Two, Command::RequestMuteStatus, AnswerCode::StatusUpdate, vec![MuteState::NotMuted as u8]).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].mute.get(), MuteState::NotMuted);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::Two].mute.get(), MuteState::NotMuted);
     }
 
     #[test]
     fn set_zone_2_mute_error() {
-        let mut amp_state: AmpState = Default::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].mute.get(), MuteState::NotMuted);
-        match create_command_response(&Request::new(ZoneNumber::Two, Command::RequestMuteStatus, vec![0x1]).unwrap(), &mut amp_state) {
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::Two].mute.get(), MuteState::NotMuted);
+        match create_command_response(&Request::new(ZoneNumber::Two, Command::RequestMuteStatus, vec![0x1]).unwrap()) {
             Ok(_) => assert!(false),
             Err(e) => assert_eq!(e, "Incorrect RequestMuteStatus command 1."),
         }
@@ -586,31 +559,28 @@ mod tests {
 
     #[test]
     fn set_zone_2_mute_using_rc5() {
-        let mut amp_state: AmpState = Default::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].mute.get(), MuteState::NotMuted);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::Two].mute.get(), MuteState::NotMuted);
         let rc5_data = get_rc5command_data(RC5Command::Zone2MuteOn);
         let data =vec! [rc5_data.0, rc5_data.1];
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, data.clone()).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, data.clone()).unwrap()).unwrap(),
             Response::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, data).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].mute.get(), MuteState::Muted);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::Two].mute.get(), MuteState::Muted);
     }
 
     #[test]
     fn get_zone_2_source() {
-        let mut amp_state: AmpState = Default::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].source.get(), Source::FollowZone1);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::Two].source.get(), Source::FollowZone1);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::Two, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap(), &mut amp_state).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::Two, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap()).unwrap(),
             Response::new(ZoneNumber::Two, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::FollowZone1 as u8]).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].source.get(), Source::FollowZone1);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::Two].source.get(), Source::FollowZone1);
     }
 
     #[test]
     fn set_zone_2_source_error() {
-        let mut amp_state: AmpState = Default::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].source.get(), Source::FollowZone1);
-        match create_command_response(&Request::new(ZoneNumber::Two, Command::RequestCurrentSource, vec![Source::TUNER as u8]).unwrap(), &mut amp_state) {
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::Two].source.get(), Source::FollowZone1);
+        match create_command_response(&Request::new(ZoneNumber::Two, Command::RequestCurrentSource, vec![Source::TUNER as u8]).unwrap()) {
             Ok(_) => assert!(false),
             Err(e) => assert_eq!(e, "Incorrect RequestCurrentSource command 11."),
         }
@@ -618,15 +588,13 @@ mod tests {
 
     #[test]
     fn set_zone_2_source_using_rc5() {
-        let mut amp_state: AmpState = Default::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].source.get(), Source::FollowZone1);
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::Two].source.get(), Source::FollowZone1);
         let rc5_data= get_rc5command_data(RC5Command::BD);
         let data = vec![rc5_data.0, rc5_data.1];
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, data.clone()).unwrap(), &mut amp_state).unwrap(),
-            Response::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, data).unwrap()
-        );
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].source.get(), Source::BD);
+            create_command_response(&Request::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, data.clone()).unwrap()).unwrap(),
+            Response::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, data).unwrap());
+        assert_eq!(AMP_STATE.lock().unwrap().zones[&ZoneNumber::Two].source.get(), Source::BD);
     }
 
 }
