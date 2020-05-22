@@ -915,7 +915,7 @@ impl Response {
 
 impl fmt::Debug for Response {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut ds = f.debug_struct("Request");
+        let mut ds = f.debug_struct("Response");
         ds.field("zone", &self.zone);
         ds.field("cc", &self.cc);
         ds.field("ac", &self.ac);
