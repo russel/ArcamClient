@@ -81,6 +81,19 @@ fn get_default_brightness() {
 }
 
 #[test]
+fn set_zone_1_source_to_bd() {
+    let rc5_data = get_rc5command_data(RC5Command::BD);
+    let data = vec![rc5_data.0, rc5_data.1];
+    let response_data = connect_mock_avr850_send_and_receive(
+        &Request::new(ZoneNumber::One, Command::SimulateRC5IRCommand, data.clone()).unwrap().to_bytes()
+    );
+    assert_eq!(
+        Response::parse_bytes(&response_data).unwrap(),
+        (Response::new(ZoneNumber::One, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, data.clone()).unwrap(), 8)
+    );
+}
+
+#[test]
 fn send_multi_packet_message() {
     let mut send_data = Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_QUERY]).unwrap().to_bytes();
     send_data.append(&mut Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap().to_bytes());
@@ -92,7 +105,7 @@ fn send_multi_packet_message() {
     let receive_count = read_from_mock_avr850(&stream, &mut buffer);
     let mut data = buffer[..receive_count].to_owned();
     let response_1 = Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![Brightness::Level2 as u8]).unwrap();
-    let response_2 = Response::new(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::CD as u8]).unwrap();
+    let response_2 = Response::new(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::BD as u8]).unwrap();
     let response_3 = Response::new(ZoneNumber::Two, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::FollowZone1 as u8]).unwrap();
     assert_eq!(
         Response::parse_bytes(&data).unwrap(),
@@ -144,17 +157,4 @@ fn send_multi_packet_message() {
         response_count += 1;
     }
     assert_eq!(response_count, 3);
-}
-
-#[test]
-fn set_zone_1_source_to_bd() {
-    let rc5_data = get_rc5command_data(RC5Command::BD);
-    let data = vec![rc5_data.0, rc5_data.1];
-    let response_data = connect_mock_avr850_send_and_receive(
-        &Request::new(ZoneNumber::One, Command::SimulateRC5IRCommand, data.clone()).unwrap().to_bytes()
-    );
-    assert_eq!(
-        Response::parse_bytes(&response_data).unwrap(),
-        (Response::new(ZoneNumber::One, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, data.clone()).unwrap(), 8)
-    );
 }

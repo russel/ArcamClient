@@ -271,23 +271,31 @@ async fn handle_a_connection(stream: TcpStream) -> io::Result<()> {
     loop {
         let mut buffer = [0u8; 1024];
         let read_count = reader.read(&mut buffer).await?;
+        debug!("handle_a_connection:  read {} bytes into buffer {:?}", &read_count, &buffer[..read_count]);
         if read_count == 0 {
             debug!("handle_a_connection:  Connection read zero bytes, assuming a dropped connection.");
             break;
         }
-        let data = buffer[..read_count].to_vec();
+        let mut data = &buffer[..read_count];
         if data[0] == PACKET_START {
-            match Request::parse_bytes(&data) {
-                Ok((request, count)) => {
-                    match create_command_response(&request) {
-                        Ok(response) => {
-                            debug!("handle_a_connection:  sending the response {:?}", &response);
-                            writer.write_all(&response.to_bytes()).await?;
-                        },
-                        Err(e) => debug!("handle_a_connection:  failed to process a request – {}", e),
-                    }
-                },
-                Err(e) => debug!("handle_a_connection:  failed to parse {:?} as a request – {}", &data, e),
+            loop {
+                match Request::parse_bytes(&data) {
+                    Ok((request, count)) => {
+                        data = &data[count..];
+                        debug!("handle_a_client:  got a request {:?}, data used {} items", &request, &count);
+                        match create_command_response(&request) {
+                            Ok(response) => {
+                                debug!("handle_a_connection:  sending the response {:?}", &response);
+                                writer.write_all(&response.to_bytes()).await?;
+                            },
+                            Err(e) => debug!("handle_a_connection:  failed to process a request – {}", e),
+                        }
+                    },
+                    Err(e) => {
+                        debug!("handle_a_connection:  failed to parse {:?} as a request – {}", &data, e);
+                        break;
+                    },
+                }
             }
         } else {
             match from_utf8(&data) {
@@ -351,6 +359,9 @@ mod tests {
         REQUEST_QUERY,
         get_rc5command_data,
     };
+
+    // NB All these tests work on the same state so there is coupling between them.
+    // Any change of state made by a test will be visible to all tests executed afterwards.
 
     #[test]
     fn get_display_brightness() {
