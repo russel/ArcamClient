@@ -187,9 +187,10 @@ pub fn set_source_on_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber, source:
 // Experimental evidence indicates that a real AVR 850 cannot deal with a large number
 // of requests being sent to it at once. This means requests must be sent with a small
 // time gap. The gap has been ascertained by rough experiment with an AVR850 rather
-// than guesswork: 150 ms seems insufficient, 175 ms appears to work.
+// than guesswork: 150 ms seems insufficient, 175 ms works sometimes, 200 ms seems
+// mostly to work but not always, 225 ms seems to work always.
 pub fn initialise_control_window(sender: &mut Sender<Vec<u8>>) {
-    glib::timeout_add_local(175, {
+    glib::timeout_add_local(225, {
         let mut s = sender.clone();
         let mut count = -1;
         move || {
