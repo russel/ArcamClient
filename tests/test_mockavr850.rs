@@ -95,66 +95,36 @@ fn set_zone_1_source_to_bd() {
 
 #[test]
 fn send_multi_packet_message() {
+    // NB It is not certain that the order of responses to the requests matches the order
+    // of the requests. So check only that the three expected responses arrived, do not
+    // impose an order on the Responses.
     let mut send_data = Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_QUERY]).unwrap().to_bytes();
     send_data.append(&mut Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap().to_bytes());
     send_data.append(&mut Request::new(ZoneNumber::Two, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap().to_bytes());
     let stream = connect_to_mock_avr850();
     send_to_mock_avr850(&stream, &send_data);
     let mut buffer = [0u8; 4096];
-    let mut response_count = 0;
-    let receive_count = read_from_mock_avr850(&stream, &mut buffer);
-    let mut data = buffer[..receive_count].to_owned();
-    let response_1 = Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![Brightness::Level2 as u8]).unwrap();
-    let response_2 = Response::new(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::BD as u8]).unwrap();
-    let response_3 = Response::new(ZoneNumber::Two, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::FollowZone1 as u8]).unwrap();
-    assert_eq!(
-        Response::parse_bytes(&data).unwrap(),
-        (response_1, 7)
-    );
-    response_count += 1;
-    if data.len() > 7 {
-        for _ in 0..7 { data.remove(0); }
-        assert_eq!(
-            Response::parse_bytes(&data).unwrap(),
-            (response_2.clone(), 7)
-        );
-        response_count += 1;
-        if data.len() > 7 {
-            for _ in 0..7 { data.remove(0); }
-            assert_eq!(
-                Response::parse_bytes(&data).unwrap(),
-                (response_3.clone(), 7)
-            );
-            response_count += 1;
+    let mut responses: Vec<Response> = vec![];
+    while responses.len() < 3 {
+        let receive_count = read_from_mock_avr850(&stream, &mut buffer);
+        let mut data = &buffer[..receive_count];
+        while data.len() > 0 {
+            match Response::parse_bytes(&data) {
+                Ok((response, count)) => {
+                    data = &data[count..];
+                    responses.push(response);
+                },
+                Err(e) => assert!(false),
+            }
         }
     }
-    assert!(response_count > 0);
-    if response_count < 3 {
-        let receive_count = read_from_mock_avr850(&stream, &mut buffer);
-        data = buffer[..receive_count].to_owned();
-        assert_eq!(
-            Response::parse_bytes(&data).unwrap(),
-            (response_2, 7)
-        );
-        response_count += 1;
-        if data.len() > 7 {
-            for _ in 0..7 { data.remove(0); }
-            assert_eq!(
-                Response::parse_bytes(&data).unwrap(),
-                (response_3.clone(), 7)
-            );
-            response_count += 1;
-        }
-    }
-    assert!(response_count > 1);
-    if response_count < 3 {
-        let receive_count = read_from_mock_avr850(&stream, &mut buffer);
-        data = buffer[..receive_count].to_owned();
-        assert_eq!(
-            Response::parse_bytes(&data).unwrap(),
-            (response_3, 7)
-        );
-        response_count += 1;
-    }
-    assert_eq!(response_count, 3);
+    assert!(responses.contains(
+        &Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![Brightness::Level2 as u8]).unwrap()
+    ));
+    assert!(responses.contains(
+        &Response::new(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::BD as u8]).unwrap()
+    ));
+    assert!(responses.contains(
+        &Response::new(ZoneNumber::Two, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::FollowZone1 as u8]).unwrap()
+    ));
 }
