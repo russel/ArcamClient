@@ -95,7 +95,7 @@ async fn start_a_connection_and_set_up_event_listeners(
     let context = glib::MainContext::default();
     context.spawn_local(async move {
         while let Some(data) = to_comms_manager.next().await {
-            debug!("start_a_connection_and_set_up_event_listenersWriting {:?}", &data);
+            debug!("start_a_connection_and_set_up_event_listeners:  Writing {:?}", &data);
             match writer.write_all(&data).await {
                 Ok(_) => { debug!("start_a_connection_and_set_up_event_listeners:  Successfully sent packet to amp {:?}.", data); },
                 Err(e) => {
