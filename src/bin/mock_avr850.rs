@@ -289,25 +289,25 @@ async fn send_tuner_rds_dls(zone: ZoneNumber, mut stream: TcpStream) -> io::Resu
             // string is padded with spaces to fill the 128 characters. A real AVR850 seems
             // to null terminate the string, with two nulls and then pad the 129 characters
             // with space.
-            let mut rds_dls_buffer = [' ' as u8; 129];
+            let mut dls_pdt_buffer = [' ' as u8; 129];
             // Quite weird that elapsed doesn't return zero!
-            let rds_dsl_data = format!("This RDS DLS information sent after {:?}", SystemTime::now().elapsed().unwrap());
-            assert!(rds_dsl_data.len() <= 128);
+            let dsl_pdt_data = format!("This DLS/PDT information sent after {:?}", SystemTime::now().elapsed().unwrap());
+            assert!(dsl_pdt_data.len() <= 128);
             let mut i = 0;
-            for c in rds_dsl_data.bytes() {
-                rds_dls_buffer[i] = c;
+            for c in dsl_pdt_data.bytes() {
+                dls_pdt_buffer[i] = c;
                 i += 1;
             }
-            assert_eq!(i, rds_dsl_data.len());
-            rds_dls_buffer[i] = 0;
+            assert_eq!(i, dsl_pdt_data.len());
+            dls_pdt_buffer[i] = 0;
             // AVR850 appears to put two null bytes in the buffer if it can.
-            if rds_dsl_data.len() < 128 {
+            if dsl_pdt_data.len() < 128 {
                 i += 1;
-                rds_dls_buffer[i] = 0;
+                dls_pdt_buffer[i] = 0;
             }
-            debug!("send_tuner_rds_dls:  Sending {:?}", &rds_dls_buffer.to_vec()); // Can only print an array of 32 or less items.
+            debug!("send_tuner_rds_dls:  Sending {:?}", &dls_pdt_buffer.to_vec()); // Can only print an array of 32 or less items.
             stream.write_all(&Response::new(zone, Command::DLSPDTInformation, AnswerCode::StatusUpdate,
-                                            rds_dls_buffer.to_vec()).unwrap().to_bytes()).await?;
+                                            dls_pdt_buffer.to_vec()).unwrap().to_bytes()).await?;
         } else { break; }
         task::sleep(Duration::from_secs(5)).await;
     }
@@ -413,7 +413,7 @@ fn main() -> io::Result<()> {
 #[cfg(test)]
 mod tests {
 
-    use super::{AmpState, AMP_STATE, create_command_response};
+    use super::{AmpState, create_command_response};
 
     use arcamclient::arcam_protocol::{
         AnswerCode, Brightness, Command, MuteState, PowerState, RC5Command, Request, Response, Source, ZoneNumber,
