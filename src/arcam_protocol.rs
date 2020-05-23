@@ -98,7 +98,7 @@ pub enum Command {
     Tune = 0x16,
     RequestDABStation = 0x18, // Was called RequestDABSiriusStation for AVR600
     ProgrammeTypeCategory = 0x19, // Was called RadioProgrammeTypeCategory for AVR600
-    RequestRDSDLSInformation = 0x1A,
+    DLSPDTInformation = 0x1A, // Was called RequestRDSDLSInformation dor AVR600
     RequestPresetDetails = 0x1B,
     NetworkPlaybackStatus = 0x1C,
     IMAXEnhanced = 0x0C, // In AVR850, not in AVR600
@@ -1124,8 +1124,9 @@ mod tests {
                 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
                 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
                 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 13,];
-        let response = Response::new(ZoneNumber::One, Command::RequestRDSDLSInformation, AnswerCode::StatusUpdate,
-        vec![12, 78, 111, 119, 32, 111, 110, 32, 83, 109, 111, 111, 116, 104, 58,
+        assert_eq!(input.len(), 135);
+        let response = Response::new(ZoneNumber::One, Command::DLSPDTInformation, AnswerCode::StatusUpdate,
+                                     vec![12, 78, 111, 119, 32, 111, 110, 32, 83, 109, 111, 111, 116, 104, 58,
                   32, 76, 105, 118, 105, 110, 103, 32, 73, 110, 32, 65, 32, 66, 111, 120, 32, 119, 105, 116, 104, 32, 82,
                   111, 111, 109, 32, 73, 110, 32, 89, 111, 117, 114, 32, 72, 101, 97, 114, 116, 0, 0, 32, 32, 32, 32, 32,
                   32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,

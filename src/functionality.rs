@@ -255,17 +255,21 @@ fn handle_response(control_window: &Rc<ControlWindow>, response: &Response) {
             debug!("handle_response:  Got the station type: {}.", message);
             control_window.set_music_type_display(&message);
         }
-        Command::RequestRDSDLSInformation => {
+        Command::DLSPDTInformation => {
+            // An AVR850 appears to behave differently to the documentation. Documentation
+            // says a 128 byte buffer with the string padded out with spaces. Reality indicates
+            // a 129 byte buffer with a nul terminated string padded out with spaces. Implement
+            // what the real AVR850 pumps out.
             assert_eq!(response.data.len(), 129);
             let index_of_nul = match response.data.iter().position(|x| *x == 0u8) {
                 Some(i) => i,
                 None => { debug!("handle_response:  Failed to find a nul character in the array."); 129 },
             };
-            let message = match String::from_utf8(response.data[1..index_of_nul].to_vec()) {
+            let message = match String::from_utf8(response.data[0..index_of_nul].to_vec()) {
                 Ok(s) => s.trim().to_string(),
-                Err(e) => { debug!("Fhandle_response:  ailed to get a string – {}.", e); "".to_string() },
+                Err(e) => { debug!("handle_response:  Failed to get a string – {}.", e); "".to_string() },
             };
-            debug!("functionality::handle_response: got the RDS DLS: {}.", message);
+            debug!("functionality::handle_response: got the DLS/PDT: {}.", message);
             control_window.set_rds_dls(&message);
         }
         Command::RequestCurrentSource => {
@@ -304,7 +308,7 @@ pub fn try_parse_of_response_data(control_window: &Rc<ControlWindow>, queue: &mu
             debug!("try_parse_of_response_data:  Failed to parse a packet from {:?}.", queue);
             match e {
                 "Insufficient bytes to form a packet." => {},
-                _ => panic!("XXXXX {}", e),
+                _ => panic!("try_parse_of_response_data:  {}", e),
             };
             false
         },
