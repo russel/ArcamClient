@@ -49,45 +49,59 @@ fn system_test_with_mock_amp() {
     let application = gtk::Application::new(Some("uk.org.winder.arcamclient.system_test"), gio::ApplicationFlags::empty()).unwrap();
     application.connect_startup(move |app| {
         let control_window = ControlWindow::new(&app, Some(unsafe { PORT_NUMBER }));
-
+        // Connect to the mock AVR850.
         control_window.set_address("127.0.0.1");
         control_window.set_connect_chooser(true);
-
         // Have to wait for long enough for all the activity of initialising to settle.
-        // 1 s seems insufficient.
-        glib::timeout_add_local(1250, {
+        // 2 s seems insufficient.
+        glib::timeout_add_local(2250, {
             let a = app.clone();
             let c_w = control_window.clone();
-            let mut first_run = true;
-
             move ||{
 
-                if first_run {
-                    first_run = false;
-                    Continue(true)
-                } else {
+                // Check the initial state is correct.
+                assert_eq!(c_w.get_connect_display_value(), ConnectedState::Connected);
+                assert_eq!(c_w.get_brightness_display_value(), Brightness::Level2);
+                assert_eq!(c_w.get_power_display_value(ZoneNumber::One), PowerState::On);
+                assert_eq!(c_w.get_volume_display_value(ZoneNumber::One), 30);
+                assert_eq!(c_w.get_mute_display_value(ZoneNumber::One), MuteState::NotMuted);
+                assert_eq!(c_w.get_source_display_value(ZoneNumber::One), Source::CD);
+                assert_eq!(c_w.get_power_display_value(ZoneNumber::Two), PowerState::Standby);
+                assert_eq!(c_w.get_volume_display_value(ZoneNumber::Two), 20);
+                assert_eq!(c_w.get_mute_display_value(ZoneNumber::Two), MuteState::NotMuted);
+                assert_eq!(c_w.get_source_display_value(ZoneNumber::Two), Source::FollowZone1);
 
-                    // Check the initial state is correct.
-                    assert_eq!(c_w.get_connect_display_value(), ConnectedState::Connected);
-                    assert_eq!(c_w.get_brightness_display_value(), Brightness::Level2);
-                    assert_eq!(c_w.get_power_display_value(ZoneNumber::One), PowerState::On);
-                    assert_eq!(c_w.get_volume_display_value(ZoneNumber::One), 30);
-                    assert_eq!(c_w.get_mute_display_value(ZoneNumber::One), MuteState::NotMuted);
-                    assert_eq!(c_w.get_source_display_value(ZoneNumber::One), Source::CD);
-                    assert_eq!(c_w.get_power_display_value(ZoneNumber::Two), PowerState::Standby);
-                    assert_eq!(c_w.get_volume_display_value(ZoneNumber::Two), 20);
-                    assert_eq!(c_w.get_mute_display_value(ZoneNumber::Two), MuteState::NotMuted);
-                    assert_eq!(c_w.get_source_display_value(ZoneNumber::Two), Source::FollowZone1);
+                // Set Zone 2 to CD and then to FollowZone1
+                c_w.set_source_chooser(ZoneNumber::Two, Source::CD);
+                glib::timeout_add_local(50, {
+                    let cw = c_w.clone();
+                    move || {
+                        assert_eq!(cw.get_source_display_value(ZoneNumber::Two), Source::CD);
+                        cw.set_source_chooser(ZoneNumber::Two, Source::FollowZone1);
+                        glib::timeout_add_local(50, {
+                            let c = cw.clone();
+                            move || {
+                                assert_eq!(c.get_source_display_value(ZoneNumber::Two), Source::FollowZone1);
+                                Continue(false)
+                            }
+                        });
+                        Continue(false)
+                    }
+                });
 
-                    glib::idle_add_local({
-                        let aa = a.clone();
-                        move || {
+                // Add the application quit event once there is no other event.
+                glib::timeout_add_local(500, {
+                    let aa = a.clone();
+                    move || {
+                        if glib::MainContext::default().pending() {
+                            Continue(true)
+                        } else {
                             aa.quit();
                             Continue(false)
                         }
-                    });
-                    Continue(false)
-                }
+                    }
+                });
+                Continue(false)
             }
         });
     });

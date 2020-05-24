@@ -241,6 +241,10 @@ fn create_command_response(request: &Request, amp_state: &mut AmpState, stream: 
                     assert_eq!(request.zone, ZoneNumber::One);
                     amp_state.zones[&request.zone].power.set(PowerState::Standby);
                 },
+                RC5Command::SetZone2ToFollowZone1 => {
+                    assert_eq!(request.zone, ZoneNumber::Two);
+                    amp_state.zones[&request.zone].source.set(Source::FollowZone1)
+                },
                 RC5Command::Zone2PowerOn => {
                     assert_eq!(request.zone, ZoneNumber::Two);
                     amp_state.zones[&request.zone].power.set(PowerState::On)

@@ -31,19 +31,20 @@ use gtk::prelude::*;
 use futures;
 use futures::channel::mpsc::{Sender, Receiver};
 use futures::StreamExt;
-//use futures::TryStreamExt;
-//use futures::AsyncRead;
-//use futures_util::io::AsyncReadExt;
 
-use arcamclient::arcam_protocol::{
-    AnswerCode, Brightness, Command, Request, Response, Source, ZoneNumber,
-    REQUEST_QUERY,
-};
+use arcamclient::arcam_protocol::{AnswerCode, Brightness, Command, Request, Response, Source, ZoneNumber, REQUEST_QUERY, RC5Command, get_rc5command_data};
 use arcamclient::comms_manager;
 use arcamclient::control_window::ControlWindow;
-use arcamclient::functionality::{ResponseTuple, get_brightness_from_amp, get_source_from_amp, send_request_bytes, set_volume_on_amp};
+use arcamclient::functionality::{ResponseTuple, get_brightness_from_amp, get_source_from_amp, send_request_bytes, set_volume_on_amp, set_source_on_amp};
 
 use start_avr850::PORT_NUMBER;
+
+// GTK+ is not thread safe and starting an application requires access to the default
+// context. This means we cannot run multiple Rust tests since they are multi-threaded.
+// It is possible to run the tests single threaded, but that runs into problems. All in
+// all it seems best to run all the tests within a single application. Messy as it means
+// there is coupling between the tests – any changes made to the mock AVR850 state
+// during a test is there for all subsequent tests.
 
 #[test]
 fn communications_test() {
@@ -74,6 +75,7 @@ fn communications_test() {
             async move {
 
                 get_brightness_from_amp(&mut sender);
+                // TODO It seems that the following .await causes the whole to terminate. Most times, but not always.
                 match rx_queue.next().await {
                     Some(s) => assert_eq!(s, Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![Brightness::Level2 as u8]).unwrap().to_bytes()),
                     None => assert!(false, "Failed to get a value from the response queue."),
@@ -104,11 +106,46 @@ fn communications_test() {
                     None => assert!(false, "Failed to get a value from the response queue."),
                 };
 
+                // Set Zone 2 to CD and then to FollowZone1
+                set_source_on_amp(&mut sender, ZoneNumber::Two, Source::CD);
+                set_source_on_amp(&mut sender, ZoneNumber::Two, Source::FollowZone1);
+                match rx_queue.next().await {
+                    Some(s) => {
+                        let rc5_command = get_rc5command_data(RC5Command::CD);
+                        let rc5_data = vec![rc5_command.0, rc5_command.1];
+                        assert_eq!(s, Response::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, rc5_data).unwrap().to_bytes())
+                    },
+                    None => assert!(false, "Failed to get a value from the response queue."),
+                };
+                match rx_queue.next().await {
+                    Some(s) => assert_eq!(s, Response::new(ZoneNumber::Two, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::CD as u8]).unwrap().to_bytes()),
+                    None => assert!(false, "Failed to get a value from the response queue."),
+                };
+                match rx_queue.next().await {
+                    Some(s) => {
+                        let rc5_command = get_rc5command_data(RC5Command::SetZone2ToFollowZone1);
+                        let rc5_data = vec![rc5_command.0, rc5_command.1];
+                        assert_eq!(s, Response::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, rc5_data).unwrap().to_bytes())
+                    },
+                    None => assert!(false, "Failed to get a value from the response queue."),
+                };
+                match rx_queue.next().await {
+                    Some(s) => assert_ne!(s, Response::new(ZoneNumber::Two, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::FollowZone1 as u8]).unwrap().to_bytes()),
+                    None => assert!(false, "Failed to get a value from the response queue."),
+                };
+
+                assert_eq!(1, 2);  // This line fails to execute.
+
+                // Add the application quit event once there is no other event.
                 glib::idle_add_local({
                     let aa = a.clone();
                     move ||{
-                        aa.quit();
-                        Continue(false)
+                        if glib::MainContext::default().pending() {
+                            Continue(true)
+                        } else {
+                            aa.quit();
+                            Continue(false)
+                        }
                     }
                 });
             }

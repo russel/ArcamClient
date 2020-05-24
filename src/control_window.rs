@@ -557,13 +557,19 @@ impl ControlWindow {
     // overall abstraction.
 
     #[doc(hidden)]
-    pub fn get_to_comms_manager_field(self: &Self) -> &RefCell<Option<futures::channel::mpsc::Sender<Vec<u8>>>> { &self.to_comms_manager }
+    pub fn get_to_comms_manager_field(self: &Self) -> &RefCell<Option<futures::channel::mpsc::Sender<Vec<u8>>>> {
+        &self.to_comms_manager
+    }
 
     #[doc(hidden)]
-    pub fn set_address(self: &Self, address: &str) { self.address.set_text(address); }
+    pub fn set_address(self: &Self, address: &str) {
+        self.address.set_text(address);
+    }
 
     #[doc(hidden)]
-    pub fn set_connect_chooser(self: &Self, connect: bool) { self.connect_chooser.set_active(connect) }
+    pub fn set_connect_chooser(self: &Self, connect: bool) {
+        self.connect_chooser.set_active(connect)
+    }
 
     #[doc(hidden)]
     pub fn set_power_chooser(self: &Self, zone: ZoneNumber, power: PowerState) {
@@ -596,4 +602,5 @@ impl ControlWindow {
             ZoneNumber::Two => &self.zone_2_source_chooser,
         }.set_active_id(Some(&format!("{:?}", source)));
     }
+
 }
