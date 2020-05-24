@@ -244,7 +244,7 @@ fn handle_response(control_window: &Rc<ControlWindow>, response: &Response) {
                 Err(e) => { debug!("Failed to process {:?} – {:?}", &response.data, e); "".to_string() },
             };
             debug!("Got the station name: {}", message);
-            control_window.set_radio_station_display(&message);
+            control_window.set_radio_station_display(response.zone, &message);
         }
         Command::ProgrammeTypeCategory => {
             assert_eq!(response.data.len(), 16);
@@ -253,7 +253,7 @@ fn handle_response(control_window: &Rc<ControlWindow>, response: &Response) {
                 Err(e) => { debug!("handle_response:  Failed to process {:?} – {:?}.", &response.data, e); "".to_string()},
             };
             debug!("handle_response:  Got the station type: {}.", message);
-            control_window.set_music_type_display(&message);
+            control_window.set_music_type_display(response.zone, &message);
         }
         Command::DLSPDTInformation => {
             // An AVR850 appears to behave differently to the documentation. Documentation
@@ -270,7 +270,7 @@ fn handle_response(control_window: &Rc<ControlWindow>, response: &Response) {
                 Err(e) => { debug!("handle_response:  Failed to get a string – {}.", e); "".to_string() },
             };
             debug!("functionality::handle_response: got the DLS/PDT: {}.", message);
-            control_window.set_rds_dls(&message);
+            control_window.set_dlspdt_information(response.zone, &message);
         }
         Command::RequestCurrentSource => {
             assert_eq!(response.data.len(), 1);

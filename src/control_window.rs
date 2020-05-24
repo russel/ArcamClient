@@ -108,6 +108,10 @@ pub struct ControlWindow {
     zone_1_mute_chooser: gtk::CheckButton,
     zone_1_source_display: gtk::Label,
     zone_1_source_chooser: gtk::ComboBoxText,
+    zone_1_radio_data: gtk::Box,
+    zone_1_radio_station_display: gtk::Label,
+    zone_1_music_type_display: gtk::Label,
+    zone_1_dlspdt_information_display: gtk::Label,
     zone_2_power_display: gtk::Label,
     zone_2_power_chooser: gtk::CheckButton,
     zone_2_volume_display: gtk::Label,
@@ -116,10 +120,10 @@ pub struct ControlWindow {
     zone_2_mute_chooser: gtk::CheckButton,
     zone_2_source_display: gtk::Label,
     zone_2_source_chooser: gtk::ComboBoxText,
-    radio_data: gtk::Box,
-    radio_station_display: gtk::Label,
-    music_type_display: gtk::Label,
-    rds_dls: gtk::Label,
+    zone_2_radio_data: gtk::Box,
+    zone_2_radio_station_display: gtk::Label,
+    zone_2_music_type_display: gtk::Label,
+    zone_2_dlspdt_information_display: gtk::Label,
     to_comms_manager: RefCell<Option<futures::channel::mpsc::Sender<Vec<u8>>>>,
 }
 
@@ -172,6 +176,10 @@ impl ControlWindow {
         let zone_1_mute_chooser: gtk::CheckButton = builder.get_object("zone_1_mute_chooser").unwrap();
         let zone_1_source_display: gtk::Label = builder.get_object("zone_1_source_display").unwrap();
         let zone_1_source_chooser: gtk::ComboBoxText= builder.get_object("zone_1_source_chooser").unwrap();
+        let zone_1_radio_data: gtk::Box = builder.get_object("zone_1_radio_data").unwrap();
+        let zone_1_radio_station_display: gtk::Label = builder.get_object("zone_1_radio_station_display").unwrap();
+        let zone_1_music_type_display: gtk::Label = builder.get_object("zone_1_music_type_display").unwrap();
+        let zone_1_dlspdt_information_display: gtk::Label = builder.get_object("zone_1_DLSPDT_information_display").unwrap();
         let zone_2_power_display: gtk::Label = builder.get_object("zone_2_power_display").unwrap();
         let zone_2_power_chooser: gtk::CheckButton = builder.get_object("zone_2_power_chooser").unwrap();
         let zone_2_volume_display: gtk::Label = builder.get_object("zone_2_volume_display").unwrap();
@@ -180,10 +188,10 @@ impl ControlWindow {
         let zone_2_mute_chooser: gtk::CheckButton = builder.get_object("zone_2_mute_chooser").unwrap();
         let zone_2_source_display: gtk::Label = builder.get_object("zone_2_source_display").unwrap();
         let zone_2_source_chooser: gtk::ComboBoxText= builder.get_object("zone_2_source_chooser").unwrap();
-        let radio_data: gtk::Box = builder.get_object("radio_data").unwrap();
-        let radio_station_display: gtk::Label = builder.get_object("radio_station_display").unwrap();
-        let music_type_display: gtk::Label = builder.get_object("music_type_display").unwrap();
-        let rds_dls: gtk::Label = builder.get_object("RDS_DLS").unwrap();
+        let zone_2_radio_data: gtk::Box = builder.get_object("zone_2_radio_data").unwrap();
+        let zone_2_radio_station_display: gtk::Label = builder.get_object("zone_2_radio_station_display").unwrap();
+        let zone_2_music_type_display: gtk::Label = builder.get_object("zone_2_music_type_display").unwrap();
+        let zone_2_dlspdt_information_display: gtk::Label = builder.get_object("zone_2_DLSPDT_information_display").unwrap();
         let control_window = Rc::new(ControlWindow {
             window,
             address,
@@ -199,6 +207,10 @@ impl ControlWindow {
             zone_1_mute_chooser,
             zone_1_source_display,
             zone_1_source_chooser,
+            zone_1_radio_data,
+            zone_1_radio_station_display,
+            zone_1_music_type_display,
+            zone_1_dlspdt_information_display,
             zone_2_power_display,
             zone_2_power_chooser,
             zone_2_volume_display,
@@ -207,10 +219,10 @@ impl ControlWindow {
             zone_2_mute_chooser,
             zone_2_source_display,
             zone_2_source_chooser,
-            radio_data,
-            radio_station_display,
-            music_type_display,
-            rds_dls,
+            zone_2_radio_data,
+            zone_2_radio_station_display,
+            zone_2_music_type_display,
+            zone_2_dlspdt_information_display,
             to_comms_manager: RefCell::new(None),
         });
         let (tx_from_comms_manager, rx_from_comms_manager) = glib::MainContext::channel(glib::source::PRIORITY_DEFAULT);
@@ -421,35 +433,47 @@ impl ControlWindow {
 
     /// Sets the value shown in the zone specific source display UI component.
     pub fn set_source_display(self: &Self, zone: ZoneNumber, source: Source) {
-        let (source_display, source_chooser) = match zone {
-            ZoneNumber::One => (&self.zone_1_source_display, &self.zone_1_source_chooser),
-            ZoneNumber::Two => (&self.zone_2_source_display, &self.zone_2_source_chooser),
+        let (source_display, source_chooser, radio_data) = match zone {
+            ZoneNumber::One => (&self.zone_1_source_display, &self.zone_1_source_chooser, &self.zone_1_radio_data),
+            ZoneNumber::Two => (&self.zone_2_source_display, &self.zone_2_source_chooser, &self.zone_2_radio_data),
         };
         let source_id = format!("{:?}", source);
         source_display.set_text(&source_id);
-        if source == Source::TUNER { self.radio_data.show(); }
-        else { self.radio_data.hide(); }
+        if source == Source::TUNER { radio_data.show(); }
+        else { radio_data.hide(); }
         if source_chooser.get_active_id().unwrap() != source_id {
             source_chooser.set_active_id(Some(&source_id));
         }
     }
 
     /// Sets the value in the radio station name display UI component.
-    pub fn set_radio_station_display(self: &Self, station: &str) {
-        self.radio_station_display.set_text(station);
-        self.radio_data.show();
+    pub fn set_radio_station_display(self: &Self, zone: ZoneNumber, station: &str) {
+        let (radio_data, radio_station_display) = match zone {
+            ZoneNumber::One => (&self.zone_1_radio_data, &self.zone_1_radio_station_display),
+            ZoneNumber::Two => (&self.zone_2_radio_data, &self.zone_2_radio_station_display),
+        };
+        radio_station_display.set_text(station);
+        radio_data.show();
     }
 
     /// Sets the value in the music type display UI component.
-    pub fn set_music_type_display(self: &Self, style: &str) {
-        self.music_type_display.set_text(style);
-        self.radio_data.show();
+    pub fn set_music_type_display(self: &Self, zone: ZoneNumber, style: &str) {
+        let (radio_data, music_type_display) = match zone {
+            ZoneNumber::One => (&self.zone_1_radio_data, &self.zone_1_music_type_display),
+            ZoneNumber::Two => (&self.zone_2_radio_data, &self.zone_2_music_type_display),
+        };
+        music_type_display.set_text(style);
+        radio_data.show();
     }
 
-    /// Sets the value in the RDS DLS display UI component.
-    pub fn set_rds_dls(self: &Self, text: &str) {
-        self.rds_dls.set_text(text);
-        self.radio_data.show();
+    /// Sets the value in the DLS/PDT information display UI component.
+    pub fn set_dlspdt_information(self: &Self, zone:ZoneNumber, text: &str) {
+        let (radio_data, dlspdt_information_display) = match zone {
+            ZoneNumber::One => (&self.zone_1_radio_data, &self.zone_1_dlspdt_information_display),
+            ZoneNumber::Two => (&self.zone_2_radio_data, &self.zone_2_dlspdt_information_display),
+        };
+        dlspdt_information_display.set_text(text);
+        radio_data.show();
     }
 
     /// Accessor for the current value of the connect display UI component.
