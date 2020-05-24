@@ -29,7 +29,7 @@ use gtk::prelude::*;
 use futures;
 use futures::StreamExt;
 
-use arcamclient::arcam_protocol::{AnswerCode, Command, Request, ZoneNumber};
+use arcamclient::arcam_protocol::{AnswerCode, Command, Source, RC5Command, Request, ZoneNumber, get_rc5command_data, REQUEST_QUERY};
 use arcamclient::comms_manager;
 use arcamclient::control_window;
 use arcamclient::functionality;
@@ -43,8 +43,8 @@ fn ui_test() {
         // it is not 127.0.0.1 and yet is a loopback address. This ensures the UI state
         // initialisation required with no attempt to use a mock AVR850.
         control_window.set_address("127.0.0.2");
-        control_window.get_connect_chooser().set_active(true); // Won't set the display state, so…
-        control_window.get_connect_display().set_text(&control_window::ConnectedState::Connected.to_string()); // …set it manually.
+        control_window.set_connect_chooser(true); // Won't set the display state, so…
+        control_window.set_connect_display(control_window::ConnectedState::Connected); // …set it manually.
         // Amend the state of the UI. Replace the channel to the comms manager with one
         // that we can use for checking the packets sent. This cuts off the comms manager
         // so that it's state no longer matters for the tests.
@@ -56,13 +56,39 @@ fn ui_test() {
             let c_w = control_window.clone();
             async move {
 
-                // This should trigger a change to an volume ScrollButton and therefore
+                // This should trigger a change to a volume ScrollButton and therefore
                 // send a message to the amp.
                 c_w.set_volume_chooser(ZoneNumber::One, 20.0);
 
                 match rx_queue.next().await {
                     Some(s) => assert_eq!(s, Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![0x14]).unwrap().to_bytes()),
-                    None => assert!(false, "Failed to get a value from the response queue."),
+                    None => assert!(false, "Failed to get a value from the request queue."),
+                };
+
+                // Set Zone 2 to CD and then to FollowZone1
+
+                c_w.set_source_chooser(ZoneNumber::Two, Source::CD);
+                let rc5_command = get_rc5command_data(RC5Command::CD);
+                let rc5_data = vec![rc5_command.0, rc5_command.1];
+                match rx_queue.next().await {
+                    Some(s) => assert_eq!(s, Request::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, rc5_data).unwrap().to_bytes()),
+                    None => assert!(false, "Failed to get a value from the request queue."),
+                };
+                match rx_queue.next().await {
+                    Some(s) => assert_eq!(s, Request::new(ZoneNumber::Two, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap().to_bytes()),
+                    None => assert!(false, "Failed to get a value from the request queue."),
+                };
+
+                c_w.set_source_chooser(ZoneNumber::Two, Source::FollowZone1);
+                let rc5_command = get_rc5command_data(RC5Command::SetZone2ToFollowZone1);
+                let rc5_data = vec![rc5_command.0, rc5_command.1];
+                match rx_queue.next().await {
+                    Some(s) => assert_eq!(s, Request::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, rc5_data).unwrap().to_bytes()),
+                    None => assert!(false, "Failed to get a value from the request queue."),
+                };
+                match rx_queue.next().await {
+                    Some(s) => assert_eq!(s, Request::new(ZoneNumber::Two, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap().to_bytes()),
+                    None => assert!(false, "Failed to get a value from the request queue."),
                 };
 
                 glib::idle_add_local({

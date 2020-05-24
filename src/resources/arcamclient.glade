@@ -240,12 +240,14 @@
                   <object class="GtkLabel">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="margin_top">10</property>
-                    <property name="margin_bottom">10</property>
+                    <property name="margin_top">15</property>
+                    <property name="margin_bottom">15</property>
                     <property name="label" translatable="yes">Zone 1</property>
+                    <property name="justify">fill</property>
                     <attributes>
                       <attribute name="style" value="italic"/>
                       <attribute name="weight" value="bold"/>
+                      <attribute name="scale" value="1.5"/>
                     </attributes>
                   </object>
                   <packing>
@@ -263,6 +265,9 @@
                       <object class="GtkLabel" id="zone_1_power_display">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
+                        <attributes>
+                          <attribute name="scale" value="1.5"/>
+                        </attributes>
                       </object>
                       <packing>
                         <property name="expand">True</property>
@@ -295,7 +300,7 @@
                   <object class="GtkBox">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="margin_bottom">10</property>
+                    <property name="margin_bottom">15</property>
                     <property name="orientation">vertical</property>
                     <child>
                       <object class="GtkBox">
@@ -325,6 +330,9 @@
                             <property name="margin_right">10</property>
                             <property name="width_chars">3</property>
                             <property name="max_width_chars">3</property>
+                            <attributes>
+                              <attribute name="scale" value="1.5"/>
+                            </attributes>
                           </object>
                           <packing>
                             <property name="expand">True</property>
@@ -369,7 +377,7 @@
                   <object class="GtkBox">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="margin_bottom">10</property>
+                    <property name="margin_bottom">15</property>
                     <child>
                       <object class="GtkLabel">
                         <property name="visible">True</property>
@@ -387,6 +395,9 @@
                         <property name="can_focus">False</property>
                         <property name="margin_right">10</property>
                         <property name="justify">right</property>
+                        <attributes>
+                          <attribute name="scale" value="1.5"/>
+                        </attributes>
                       </object>
                       <packing>
                         <property name="expand">True</property>
@@ -420,7 +431,7 @@
                   <object class="GtkBox">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="margin_bottom">10</property>
+                    <property name="margin_bottom">15</property>
                     <child>
                       <object class="GtkLabel">
                         <property name="visible">True</property>
@@ -444,7 +455,10 @@
                         <property name="margin_left">10</property>
                         <property name="margin_right">10</property>
                         <property name="justify">center</property>
-                        <property name="width_chars">14</property>
+                        <property name="width_chars">20</property>
+                        <attributes>
+                          <attribute name="scale" value="1.5"/>
+                        </attributes>
                       </object>
                       <packing>
                         <property name="expand">True</property>
@@ -457,7 +471,6 @@
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="halign">end</property>
-                        <property name="active">0</property>
                         <items>
                           <item id="CD" translatable="yes">CD</item>
                           <item id="BD" translatable="yes">BD</item>
@@ -638,6 +651,7 @@
                     <property name="margin_top">10</property>
                     <property name="margin_bottom">10</property>
                     <property name="label" translatable="yes">Zone 2</property>
+                    <property name="justify">fill</property>
                     <attributes>
                       <attribute name="style" value="italic"/>
                       <attribute name="weight" value="bold"/>
@@ -853,7 +867,6 @@
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="halign">end</property>
-                        <property name="active_id">FollowZone1</property>
                         <items>
                           <item id="CD" translatable="yes">CD</item>
                           <item id="BD" translatable="yes">BD</item>
@@ -999,6 +1012,17 @@
                     <property name="expand">True</property>
                     <property name="fill">True</property>
                     <property name="position">5</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="visible">True</property>
+                    <property name="can_focus">False</property>
+                  </object>
+                  <packing>
+                    <property name="expand">True</property>
+                    <property name="fill">True</property>
+                    <property name="position">6</property>
                   </packing>
                 </child>
               </object>

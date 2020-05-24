@@ -441,8 +441,9 @@ impl ControlWindow {
         source_display.set_text(&source_id);
         if source == Source::TUNER { radio_data.show(); }
         else { radio_data.hide(); }
-        if source_chooser.get_active_id().unwrap() != source_id {
-            source_chooser.set_active_id(Some(&source_id));
+        match source_chooser.get_active_id() {
+            Some(id) => if id != source_id { source_chooser.set_active_id(Some(&source_id)); },
+            None => { source_chooser.set_active_id(Some(&source_id)); },
         }
     }
 
@@ -552,30 +553,47 @@ impl ControlWindow {
         rc
     }
 
-    //  Some methods needed for the integration tests that break the abstraction.
+    // Some methods needed for the integration and system tests that break the
+    // overall abstraction.
 
     #[doc(hidden)]
-    //  ui_test has to connect to a mock amp but without a mock amp.
-    pub fn get_connect_display(self: &Self) -> gtk::Label { self.connect_display.clone() }
-
-    #[doc(hidden)]
-    //  system_test and ui_test have to connect to a mock amp.
-    pub fn get_connect_chooser(self: &Self) -> gtk::CheckButton { self.connect_chooser.clone() }
-
-    #[doc(hidden)]
-    //  system_test and ui_test have to set the address.
-    pub fn set_address(self: &Self, address: &str) { self.address.set_text(address); }
-
-    #[doc(hidden)]
-    //  ui_test has to hack the state.
     pub fn get_to_comms_manager_field(self: &Self) -> &RefCell<Option<futures::channel::mpsc::Sender<Vec<u8>>>> { &self.to_comms_manager }
 
     #[doc(hidden)]
-    pub fn set_volume_chooser(self: &Self, zone: ZoneNumber, value: f64) {
-        let item = match zone {
+    pub fn set_address(self: &Self, address: &str) { self.address.set_text(address); }
+
+    #[doc(hidden)]
+    pub fn set_connect_chooser(self: &Self, connect: bool) { self.connect_chooser.set_active(connect) }
+
+    #[doc(hidden)]
+    pub fn set_power_chooser(self: &Self, zone: ZoneNumber, power: PowerState) {
+        match zone {
+            ZoneNumber::One => &self.zone_1_power_chooser,
+            ZoneNumber::Two => &self.zone_2_power_chooser,
+        }.set_active(power.into());
+    }
+
+    #[doc(hidden)]
+    pub fn set_volume_chooser(self: &Self, zone: ZoneNumber, volume: f64) {
+        match zone {
             ZoneNumber::One => &self.zone_1_volume_chooser,
             ZoneNumber::Two => &self.zone_2_volume_chooser,
-        };
-        item.set_value(value);
+        }.set_value(volume);
+    }
+
+    #[doc(hidden)]
+    pub fn set_mute_chooser(self: &Self, zone: ZoneNumber, mute: MuteState) {
+        match zone {
+            ZoneNumber::One => &self.zone_1_mute_chooser,
+            ZoneNumber::Two => &self.zone_2_mute_chooser,
+        }.set_active(mute.into());
+    }
+
+    #[doc(hidden)]
+    pub fn set_source_chooser(self: &Self, zone: ZoneNumber, source: Source) {
+        match zone {
+            ZoneNumber::One => &self.zone_1_source_chooser,
+            ZoneNumber::Two => &self.zone_2_source_chooser,
+        }.set_active_id(Some(&format!("{:?}", source)));
     }
 }

@@ -37,6 +37,13 @@ use arcamclient::functionality;
 
 use start_avr850::PORT_NUMBER;
 
+// GTK+ is not thread safe and starting an application requires access to the default
+// context. This means we cannot run multiple Rust tests since they are multi-threaded.
+// It is possible to run the tests single threaded, but that runs into problems. All in
+// all it seems best to run all the tests within a single application. Messy as it means
+// there is coupling between the tests – any changes made to the mock AVR850 state
+// during a test is there for all subsequent tests.
+
 #[test]
 fn system_test_with_mock_amp() {
     let application = gtk::Application::new(Some("uk.org.winder.arcamclient.system_test"), gio::ApplicationFlags::empty()).unwrap();
@@ -44,9 +51,10 @@ fn system_test_with_mock_amp() {
         let control_window = ControlWindow::new(&app, Some(unsafe { PORT_NUMBER }));
 
         control_window.set_address("127.0.0.1");
-        control_window.get_connect_chooser().set_active(true);
+        control_window.set_connect_chooser(true);
 
-        // Have to wait for long enough for all the activity of initialising to settle. 1 s seems insufficient.
+        // Have to wait for long enough for all the activity of initialising to settle.
+        // 1 s seems insufficient.
         glib::timeout_add_local(1250, {
             let a = app.clone();
             let c_w = control_window.clone();
@@ -59,6 +67,7 @@ fn system_test_with_mock_amp() {
                     Continue(true)
                 } else {
 
+                    // Check the initial state is correct.
                     assert_eq!(c_w.get_connect_display_value(), ConnectedState::Connected);
                     assert_eq!(c_w.get_brightness_display_value(), Brightness::Level2);
                     assert_eq!(c_w.get_power_display_value(ZoneNumber::One), PowerState::On);

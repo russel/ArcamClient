@@ -165,7 +165,10 @@ pub fn get_source_from_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber) {
 /// to the amplifier.
 pub fn set_source_on_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber, source: Source) {
     let rc5_command = match source {
-        Source::FollowZone1 => RC5Command::SetZone2ToFollowZone1,
+        Source::FollowZone1 => {
+            assert_eq!(zone, ZoneNumber::Two);
+            RC5Command::SetZone2ToFollowZone1
+        },
         Source::CD => RC5Command::CD,
         Source::BD => RC5Command::BD,
         Source::AV => RC5Command::AV,
