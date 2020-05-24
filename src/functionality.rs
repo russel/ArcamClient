@@ -117,6 +117,8 @@ pub fn set_power_on_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber, power: P
         }
     );
     send_request(sender, &Request::new(zone, Command::SimulateRC5IRCommand, vec![rc5_data.0, rc5_data.1]).unwrap());
+    // SimulateRC5IRCommand commands do not respond with the changed status.
+    get_power_from_amp(sender, zone);
 }
 
 /// Send a [Request](../arcam_protocol/struct.Request.html) to respond with the volume for the
@@ -149,6 +151,8 @@ pub fn set_mute_on_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber, mute: Mut
         }
     );
     send_request(sender, &Request::new(zone, Command::SimulateRC5IRCommand, vec![rc5_data.0, rc5_data.1]).unwrap());
+    // SimulateRC5IRCommand commands do not respond with the changed status.
+    get_mute_from_amp(sender, zone);
 }
 
 /// Send a [Request](../arcam_protocol/struct.Request.html) to respond with the source for the
@@ -179,6 +183,8 @@ pub fn set_source_on_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber, source:
     };
     let rc5_data = get_rc5command_data(rc5_command);
     send_request(sender, &Request::new(zone, Command::SimulateRC5IRCommand, vec![rc5_data.0, rc5_data.1]).unwrap());
+    // SimulateRC5IRCommand commands do not respond with the changed status.
+    get_source_from_amp(sender, zone);
 }
 
 /// Send [Request](../arcam_protocol/struct.Request.html)s to the amplifier so as to get
