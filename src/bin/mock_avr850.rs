@@ -358,8 +358,7 @@ async fn handle_a_connection(stream: TcpStream) -> io::Result<()> {
         } else {
             match from_utf8(&data) {
                 Ok(s) => {
-                    let message = s.trim();
-                    if message == "AMX" {
+                    if s == "AMX\r" {
                         debug!("process_a_connection: sending AMX response");
                         let amx_response = "AMXB<Device-SDKClass=Receiver><Device-Make=ARCAM><Device-Model=AVR850><Device-Revision=2.0.0>\r";
                         writer.write_all(amx_response.as_bytes()).await?

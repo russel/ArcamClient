@@ -62,10 +62,10 @@ fn connect_mock_avr850_send_and_receive(send_data: &[u8]) -> Vec<u8> {
 
 #[test]
 fn amx_value() {
-    let data = connect_mock_avr850_send_and_receive("AMX".as_bytes());
+    let data = connect_mock_avr850_send_and_receive("AMX\r".as_bytes());
     assert_eq!(
-        from_utf8(&data).unwrap().trim(),
-        "AMXB<Device-SDKClass=Receiver><Device-Make=ARCAM><Device-Model=AVR850><Device-Revision=2.0.0>"
+        from_utf8(&data).unwrap(),
+        "AMXB<Device-SDKClass=Receiver><Device-Make=ARCAM><Device-Model=AVR850><Device-Revision=2.0.0>\r"
     );
 }
 
