@@ -53,8 +53,8 @@ fn system_test_with_mock_amp() {
         control_window.set_address("127.0.0.1");
         control_window.set_connect_chooser(true);
         // Have to wait for long enough for all the activity of initialising to settle.
-        // 2 s seems insufficient.
-        glib::timeout_add_local(2250, {
+        // 2 s seems insufficient. 2.25 s works locally, but fails on GitLab and Travis-CI.
+        glib::timeout_add_local(2500, {
             let a = app.clone();
             let c_w = control_window.clone();
             move ||{
