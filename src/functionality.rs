@@ -227,8 +227,6 @@ pub fn initialise_control_window(sender: &mut Sender<Vec<u8>>) {
 /// the UI.
 fn handle_response(control_window: &Rc<ControlWindow>, response: &Response) {
     debug!("handle_response:  Dealing with response {:?}.", response);
-    // TODO Deal with non-StatusUpdate packets.
-    assert_eq!(response.ac, AnswerCode::StatusUpdate);
     match response.cc {
         Command::Power => {
             assert_eq!(response.data.len(), 1);

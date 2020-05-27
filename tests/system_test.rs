@@ -45,7 +45,7 @@ use start_avr850::PORT_NUMBER;
 // during a test is there for all subsequent tests.
 
 #[test]
-fn system_test_with_mock_amp() {
+fn system_test() {
     let application = gtk::Application::new(Some("uk.org.winder.arcamclient.system_test"), gio::ApplicationFlags::empty()).unwrap();
     application.connect_startup(move |app| {
         let control_window = ControlWindow::new(&app, Some(unsafe { PORT_NUMBER }));

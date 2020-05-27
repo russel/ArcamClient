@@ -2,6 +2,16 @@
 <!-- Generated with glade 3.22.2 -->
 <interface>
   <requires lib="gtk+" version="3.20"/>
+  <object class="GtkAdjustment" id="zone_1_adjustment">
+    <property name="upper">100</property>
+    <property name="step_increment">1</property>
+    <property name="page_increment">10</property>
+  </object>
+  <object class="GtkAdjustment" id="zone_2_adjustment">
+    <property name="upper">100</property>
+    <property name="step_increment">1</property>
+    <property name="page_increment">10</property>
+  </object>
   <object class="GtkApplicationWindow" id="application_window">
     <property name="can_focus">False</property>
     <property name="show_menubar">False</property>
@@ -53,7 +63,7 @@
             </child>
           </object>
           <packing>
-            <property name="expand">True</property>
+            <property name="expand">False</property>
             <property name="fill">True</property>
             <property name="position">0</property>
           </packing>
@@ -101,7 +111,7 @@
             </child>
           </object>
           <packing>
-            <property name="expand">True</property>
+            <property name="expand">False</property>
             <property name="fill">True</property>
             <property name="position">1</property>
           </packing>
@@ -265,9 +275,6 @@
                       <object class="GtkLabel" id="zone_1_power_display">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <attributes>
-                          <attribute name="scale" value="1.5"/>
-                        </attributes>
                       </object>
                       <packing>
                         <property name="expand">True</property>
@@ -330,9 +337,6 @@
                             <property name="margin_right">10</property>
                             <property name="width_chars">3</property>
                             <property name="max_width_chars">3</property>
-                            <attributes>
-                              <attribute name="scale" value="1.5"/>
-                            </attributes>
                           </object>
                           <packing>
                             <property name="expand">True</property>
@@ -395,9 +399,6 @@
                         <property name="can_focus">False</property>
                         <property name="margin_right">10</property>
                         <property name="justify">right</property>
-                        <attributes>
-                          <attribute name="scale" value="1.5"/>
-                        </attributes>
                       </object>
                       <packing>
                         <property name="expand">True</property>
@@ -455,10 +456,7 @@
                         <property name="margin_left">10</property>
                         <property name="margin_right">10</property>
                         <property name="justify">center</property>
-                        <property name="width_chars">20</property>
-                        <attributes>
-                          <attribute name="scale" value="1.5"/>
-                        </attributes>
+                        <property name="width_chars">24</property>
                       </object>
                       <packing>
                         <property name="expand">True</property>
@@ -603,6 +601,8 @@
                         <property name="can_focus">False</property>
                         <property name="margin_bottom">10</property>
                         <property name="justify">center</property>
+                        <property name="width_chars">40</property>
+                        <property name="max_width_chars">40</property>
                       </object>
                       <packing>
                         <property name="expand">True</property>
@@ -619,7 +619,7 @@
                 </child>
               </object>
               <packing>
-                <property name="expand">True</property>
+                <property name="expand">False</property>
                 <property name="fill">True</property>
                 <property name="position">0</property>
               </packing>
@@ -1018,6 +1018,8 @@
                   <object class="GtkLabel">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
+                    <property name="width_chars">40</property>
+                    <property name="max_width_chars">40</property>
                   </object>
                   <packing>
                     <property name="expand">True</property>
@@ -1027,29 +1029,19 @@
                 </child>
               </object>
               <packing>
-                <property name="expand">True</property>
+                <property name="expand">False</property>
                 <property name="fill">True</property>
                 <property name="position">2</property>
               </packing>
             </child>
           </object>
           <packing>
-            <property name="expand">True</property>
+            <property name="expand">False</property>
             <property name="fill">True</property>
             <property name="position">6</property>
           </packing>
         </child>
       </object>
     </child>
-  </object>
-  <object class="GtkAdjustment" id="zone_1_adjustment">
-    <property name="upper">100</property>
-    <property name="step_increment">1</property>
-    <property name="page_increment">10</property>
-  </object>
-  <object class="GtkAdjustment" id="zone_2_adjustment">
-    <property name="upper">100</property>
-    <property name="step_increment">1</property>
-    <property name="page_increment">10</property>
   </object>
 </interface>
