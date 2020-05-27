@@ -242,6 +242,10 @@ impl ControlWindow {
             move |button| {
                 // NB this is the state after the UI activity that caused the event that called the closure.
                 if button.get_active() {
+                    /*
+                     * Published gtk-rs has a slightly different API to the Git repo.
+                     * Once gio-futures is integrated into gio or published, use the Git API.
+                     *
                     match c_w.address.get_text() {
                         Some(address) => {
                             if address.len() == 0 {
@@ -291,6 +295,43 @@ impl ControlWindow {
                             button.set_active(false);
                         },
                     };
+                      */
+                    // Git API Start
+                    let address = c_w.address.get_text();
+                    if address.len() == 0 {
+                        let dialogue = gtk::MessageDialog::new(
+                            Some(&c_w.window),
+                            gtk::DialogFlags::MODAL,
+                            gtk::MessageType::Info,
+                            gtk::ButtonsType::Ok,
+                            "Empty string as address, not connecting.",
+                        );
+                        dialogue.run();
+                        unsafe { dialogue.destroy(); }
+                        button.set_active(false);
+                    } else {
+                        let address = address;
+                        let p_n = match port_number {
+                            Some(p) => p,
+                            None => 50000
+                        };
+                        debug!("Connect to {}:{}.", &address, p_n);
+                        match functionality::connect_to_amp(
+                            &tx_from_comms_manager,
+                            &address.to_string(),
+                            p_n,
+                        ) {
+                            Ok(s) => {
+                                //  TODO How come a mutable borrow works here?
+                                //  TODO Why is the argument to replace here not an Option?
+                                c_w.to_comms_manager.borrow_mut().replace(s);
+                                debug!("Connected to amp at {}:{}.", address, p_n);
+                            },
+                            Err(e) => debug!("Failed to connect to amp – {:?}.", e),
+                        };
+                        functionality::initialise_control_window(&mut c_w.get_to_comms_manager());
+                    }
+                    // Git API End.
                 } else {
                     debug!("Terminate connection to amp.");
                     functionality::disconnect_from_amp();
@@ -479,23 +520,20 @@ impl ControlWindow {
 
     /// Accessor for the current value of the connect display UI component.
     pub fn get_connect_display_value(self: &Self) -> ConnectedState {
-        self.connect_display.get_text().unwrap().as_str().into()
+        self.connect_display.get_text().as_str().into()
     }
 
     /// Accessor for the current value of the brightness display UI component.
     pub fn get_brightness_display_value(self: &Self) -> Brightness {
-        self.brightness_display.get_text().unwrap().as_str().into()
+        self.brightness_display.get_text().as_str().into()
     }
 
     /// Accessor for the current value of the zone specific power display UI component.
     pub fn get_power_display_value(self: &Self, zone: ZoneNumber) -> PowerState {
-        match match zone {
+        match zone {
             ZoneNumber::One => self.zone_1_power_display.get_text(),
             ZoneNumber::Two => self.zone_2_power_display.get_text(),
-        } {
-            Some(s) => s.as_str().into(),
-            None => panic!("Could not get UI power status for zone {:?}", zone),
-        }
+        }.as_str().into()
     }
 
     /// Accessor for the current value of the zone specific volume display UI component.
@@ -503,33 +541,26 @@ impl ControlWindow {
         match match zone {
             ZoneNumber::One => self.zone_1_volume_display.get_text(),
             ZoneNumber::Two => self.zone_2_volume_display.get_text(),
-        } {
-            Some(s) => match s.parse::<u8>() {
-                Ok(v) => v,
-                Err(e) => 0u8,
-            },
-            None => 0u8,
+        }.parse::<u8>() {
+            Ok(v) => v,
+            Err(e) => 0u8,
         }
     }
 
     /// Accessor for the current value of the zone specific mute display UI component.
     pub fn get_mute_display_value(self: &Self, zone: ZoneNumber) -> MuteState {
-        match match zone {
+        match zone {
             ZoneNumber::One => self.zone_1_mute_display.get_text(),
             ZoneNumber::Two => self.zone_2_mute_display.get_text(),
-        } {
-            Some(s) => s.as_str().into(),
-            None => panic!("Could not get UI mute status for zone {:?}", zone),
-        }
+        }.as_str().into()
     }
 
     /// Accessor for the current value of the zone specific source display UI component.
     pub fn get_source_display_value(self: &Self, zone: ZoneNumber) -> Source {
-        let source_display= match zone {
+        match zone {
             ZoneNumber::One => &self.zone_1_source_display,
             ZoneNumber::Two => &self.zone_2_source_display,
-        };
-        source_display.get_text().unwrap().as_str().into()
+        }.get_text().as_str().into()
     }
 
     /// Accessor for whether the client is connected to an amplifier – real or mock.
@@ -547,7 +578,7 @@ impl ControlWindow {
                     "Not connected to an amplifier."
                 );
                 dialogue.run();
-                dialogue.destroy();
+                unsafe { dialogue.destroy(); }
             }
         }
         rc

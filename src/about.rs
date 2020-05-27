@@ -66,7 +66,7 @@ pub fn present(parent: Option<&gtk::ApplicationWindow>) {
             dialog.set_transient_for(parent);
             dialog.connect_response(move |d, _| {
                 if let Ok(active) = ABOUT.lock() {
-                    d.destroy();
+                    unsafe { d.destroy(); }
                     active.set(false);
                 }
             });

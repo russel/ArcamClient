@@ -43,7 +43,7 @@ use futures::StreamExt;
 
 use log::debug;
 
-use crate::socket_support::{SocketClient, SocketConnection};
+use gio_futures::{SocketClient, SocketConnection};
 
 async fn listen_to_reader(
     mut reader: futures::io::ReadHalf<SocketConnection>,
