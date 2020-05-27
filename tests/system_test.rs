@@ -54,7 +54,8 @@ fn system_test() {
         control_window.set_connect_chooser(true);
         // Have to wait for long enough for all the activity of initialising to settle.
         // 2 s seems insufficient. 2.25 s works locally, but fails on GitLab and Travis-CI.
-        glib::timeout_add_local(2500, {
+        // 2.5 s had worked on GitLab, but has now failed.
+        glib::timeout_add_local(3000, {
             let a = app.clone();
             let c_w = control_window.clone();
             move ||{
