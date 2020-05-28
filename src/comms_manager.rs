@@ -50,7 +50,6 @@ async fn listen_to_reader(
     from_comms_manager: glib::Sender<Vec<u8>>
 ) {
     // TODO should the byte sequence parsing happen here or elsewhere?
-    let mut queue: Vec<u8> = vec![];
     let mut buffer = [0u8; 256];
     debug!("listen_to_reader:  Entering listen loop.");
     loop {

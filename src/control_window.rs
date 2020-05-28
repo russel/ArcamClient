@@ -20,7 +20,6 @@
 //! This module provides all the structs, enums and functions associated with display and
 //! control of the UI.
 
-use std::borrow::BorrowMut; // Is this actually used?
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -32,9 +31,6 @@ use gtk;
 use gtk::prelude::*;
 
 use log::debug;
-
-use num_derive::FromPrimitive;  // Apparently unused, but it is necessary.
-use num_traits::FromPrimitive;
 
 use crate::about;
 use crate::functionality;
@@ -543,7 +539,7 @@ impl ControlWindow {
             ZoneNumber::Two => self.zone_2_volume_display.get_text(),
         }.parse::<u8>() {
             Ok(v) => v,
-            Err(e) => 0u8,
+            Err(_) => 0u8,
         }
     }
 

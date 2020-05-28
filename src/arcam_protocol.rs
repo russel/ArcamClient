@@ -146,6 +146,7 @@ pub enum Command {
 ///
 ///The order of the variants is as it is written in the table of the documentation.  It is
 /// neither numeric order nor function order.
+#[allow(non_camel_case_types)]
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum RC5Command {
     Standby,

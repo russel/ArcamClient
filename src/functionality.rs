@@ -33,8 +33,6 @@
 //! is all about class structures in an object oriented system.
 
 use std::rc::Rc;
-use std::thread::sleep;
-use std::time::Duration;
 
 use gtk;
 use gtk::prelude::*;
