@@ -10,16 +10,15 @@ readme = "README.md"
 edition = "2018"
 
 [dependencies]
-async-std = "*"
 ctor = "*"
 env_logger = "*"
 futures = "*"
-futures-util = "*"
 #gdk-pixbuf = "*"
 gdk-pixbuf = {git = "https://github.com/gtk-rs/gdk-pixbuf"}
 #gio = "*"
 gio = {git = "https://github.com/gtk-rs/gio"}
-gio-futures = {git="https://github.com/sdroege/gio-futures.git"}
+#gio-futures = {git="https://github.com/sdroege/gio-futures.git"}
+gio-futures = {path="../../../Forks/Gio_Futures"}
 #glib = {version="*", features=["v2_56"]}
 glib = {git = "https://github.com/gtk-rs/glib", features=["v2_56"]}
 #gtk = {version="*", features=["v3_22"]}
@@ -34,7 +33,3 @@ rand = "*"
 #quickcheck = "*"
 #proptest = "*"
 #rstest = "*"
-
-#[[test]]
-#name = "MOCK_AVR850"
-#harness = false

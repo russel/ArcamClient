@@ -59,15 +59,17 @@ use std::collections::HashMap;
 use std::env::args;
 use std::str::from_utf8;
 use std::sync::Mutex;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 use log::debug;
 use env_logger;
 
-use async_std::io;
-use async_std::net::{TcpListener, TcpStream};
-use async_std::prelude::*;
-use async_std::task;
+use gio;
+use gio::prelude::*;
+use gio_futures::{SocketConnection, SocketListener};
+
+use futures;
+use futures::prelude::*;
 
 use lazy_static::lazy_static;
 
@@ -125,7 +127,7 @@ lazy_static! {
 }
 
 /// Return a response to a given request updating the state of the mock amp as needed.
-fn create_command_response(request: &Request, amp_state: &mut AmpState, stream: Option<TcpStream>) -> Result<Response, String>{
+fn create_command_response(request: &Request, amp_state: &mut AmpState, sender: Option<futures::channel::mpsc::Sender<Vec<u8>>>) -> Result<Response, String>{
     match request.cc {
         Command::Power => {
             assert_eq!(request.data.len(), 1);
@@ -217,8 +219,8 @@ fn create_command_response(request: &Request, amp_state: &mut AmpState, stream: 
                 },
                 RC5Command::Radio => {
                     amp_state.zones[&request.zone].source.set(Source::TUNER);
-                    if stream.is_some() {
-                        task::spawn(send_tuner_rds_dls(request.zone, stream.unwrap().clone()));
+                    if sender.is_some() {
+                        glib::MainContext::default().spawn_local(send_tuner_data_and_start_dls_pdt_sending(request.zone, sender.unwrap().clone()));
                     }
                 },
                 RC5Command::CD => amp_state.zones[&request.zone].source.set(Source::CD),
@@ -270,132 +272,149 @@ fn create_command_response(request: &Request, amp_state: &mut AmpState, stream: 
 }
 
 /// When an AVR850 is using an FM or DAB tuner (aka radio) source, it sends out extra
-/// RDS DLS packets. These normally provide information about the show currently on the
+/// DLS/PDT packets. These normally provide information about the show currently on the
 /// station and the piece currently being played. Simulate this without even trying to
 /// be too realistic.
-async fn send_tuner_rds_dls(zone: ZoneNumber, mut stream: TcpStream) -> io::Result<()> {
+async fn send_tuner_data_and_start_dls_pdt_sending(zone: ZoneNumber, mut sender: futures::channel::mpsc::Sender<Vec<u8>>) {
     // TODO What about FM as well as DAB?
     // Station name is always 16 bytes long.
     let station_name = "A DAB Station   ";
     assert_eq!(station_name.len(), 16);
-    stream.write_all(&Response::new(zone, Command::RequestDABStation, AnswerCode::StatusUpdate,
-                                    station_name.as_bytes().to_vec()).unwrap().to_bytes()).await?;
+    sender.send(Response::new(zone, Command::RequestDABStation, AnswerCode::StatusUpdate,
+                              station_name.as_bytes().to_vec()).unwrap().to_bytes()).await.expect("Failed to send station name.");
     let programme_type = "Good Music      ";
     // Programme type is always 16 bytes long.
     assert_eq!(programme_type.len(), 16);
-    stream.write_all(&Response::new(zone, Command::ProgrammeTypeCategory, AnswerCode::StatusUpdate,
-                                    programme_type.as_bytes().to_vec()).unwrap().to_bytes()).await?;
-    loop {
-        let zone_source = AMP_STATE.lock().unwrap().zones[&zone].source.get();
-        if  zone_source == Source::TUNER || zone_source == Source::TUNERDAB {
+    sender.send(Response::new(zone, Command::ProgrammeTypeCategory, AnswerCode::StatusUpdate,
+                              programme_type.as_bytes().to_vec()).unwrap().to_bytes()).await.expect("Failed to send programme type.");
+    glib::timeout_add_seconds_local(4, {
+        let mut s = sender.clone();
+        move || {
+            let zone_source = AMP_STATE.lock().unwrap().zones[&zone].source.get();
+            if zone_source == Source::TUNER || zone_source == Source::TUNERDAB {
             // DLS/PDT data is always 128 bytes long according to the manual, but experiment
             // indicates a real AVR850 returns 129 characters.The manual states that the
             // string is padded with spaces to fill the 128 characters. A real AVR850 seems
             // to null terminate the string, with two nulls and then pad the 129 characters
             // with space.
-            let mut dls_pdt_buffer = [' ' as u8; 129];
-            // Quite weird that elapsed doesn't return zero!
-            let dsl_pdt_data = format!("This DLS/PDT information sent after {:?}", SystemTime::now().elapsed().unwrap());
-            assert!(dsl_pdt_data.len() <= 128);
-            let mut i = 0;
-            for c in dsl_pdt_data.bytes() {
-                dls_pdt_buffer[i] = c;
-                i += 1;
-            }
-            assert_eq!(i, dsl_pdt_data.len());
-            dls_pdt_buffer[i] = 0;
-            // AVR850 appears to put two null bytes in the buffer if it can.
-            if dsl_pdt_data.len() < 128 {
-                i += 1;
+                let mut dls_pdt_buffer = [' ' as u8; 129];
+                // Quite weird that elapsed doesn't return zero!
+                let dsl_pdt_data = format!("This DLS/PDT information sent after {:?}", SystemTime::now().elapsed().unwrap());
+                assert!(dsl_pdt_data.len() <= 128);
+                let mut i = 0;
+                for c in dsl_pdt_data.bytes() {
+                    dls_pdt_buffer[i] = c;
+                    i += 1;
+                }
+                assert_eq!(i, dsl_pdt_data.len());
                 dls_pdt_buffer[i] = 0;
+                // AVR850 appears to put two null bytes in the buffer if it can.
+                if dsl_pdt_data.len() < 128 {
+                    i += 1;
+                    dls_pdt_buffer[i] = 0;
+                }
+                debug!("send_tuner_rds_dls:  Sending {:?}", &dls_pdt_buffer.to_vec()); // Can only print an array of 32 or less items.
+                s.try_send(Response::new(zone, Command::DLSPDTInformation, AnswerCode::StatusUpdate,
+                                         dls_pdt_buffer.to_vec()).unwrap().to_bytes()).expect("Failed to send DLS/PDT.");
+                Continue(true)
+            } else {
+                Continue(false)
             }
-            debug!("send_tuner_rds_dls:  Sending {:?}", &dls_pdt_buffer.to_vec()); // Can only print an array of 32 or less items.
-            stream.write_all(&Response::new(zone, Command::DLSPDTInformation, AnswerCode::StatusUpdate,
-                                            dls_pdt_buffer.to_vec()).unwrap().to_bytes()).await?;
-        } else { break; }
-        task::sleep(Duration::from_secs(5)).await;
-    }
-    Ok(())
+        }
+    });
 }
 
 /// Handle a connection from a remote client.
-///
-/// Read Request byte sequences as they arrive, parse them to create Requests
-/// and then send a Response as a real AVR850 might.
-async fn handle_a_connection(stream: TcpStream) -> io::Result<()> {
-    debug!("Accepted from: {}", stream.peer_addr()?);
-    let mut reader = stream.clone();
-    let mut writer = stream.clone();
+async fn process_a_connection(connection: SocketConnection) {
+    debug!("handle_client: processing the connection from {:?}", &connection.get_remote_address());
+    let (mut reader, mut writer) = connection.split();
+    let(mut tx_send_queue, mut rx_send_queue) = futures::channel::mpsc::channel::<Vec<u8>>(10);
+    glib::MainContext::default().spawn_local(async move {
+        while let Some(data) = rx_send_queue.next().await {
+            match writer.write_all(&data).await {
+                Ok(_) => { debug!("process_a_connection: successfully sent data {:?}", &data) },
+                Err(e) => { debug!("process_a_connection: error sending data – {:?}", e) },
+            }
+        }
+    });
     loop {
-        let mut buffer = [0u8; 1024];
-        let read_count = reader.read(&mut buffer).await?;
-        debug!("handle_a_connection:  read {} bytes into buffer {:?}", &read_count, &buffer[..read_count]);
-        if read_count == 0 {
-            debug!("handle_a_connection:  Connection read zero bytes, assuming a dropped connection.");
-            break;
-        }
-        let mut data = &buffer[..read_count];
-        if data[0] == PACKET_START {
-            loop {
-                match Request::parse_bytes(&data) {
-                    Ok((request, count)) => {
-                        data = &data[count..];
-                        debug!("handle_a_client:  got a request {:?}, data used {} items", &request, &count);
-                        match create_command_response(&request, &mut AMP_STATE.lock().unwrap(), Some(stream.clone())) {
-                            Ok(response) => {
-                                debug!("handle_a_connection:  sending the response {:?}", &response);
-                                writer.write_all(&response.to_bytes()).await?;
-                            },
-                            Err(e) => debug!("handle_a_connection:  failed to process a request – {}", e),
+        let mut buffer = [0u8; 1024];  // Must be bigger than the byte size of the maximum number of simultaneous packets receivable.
+        match reader.read(&mut buffer).await {
+            Ok(read_count) => {
+                if read_count == 0 {
+                    debug!("process_a_connection: zero length read, assuming connection closed.");
+                    break;
+                } else {
+                    let mut data = &buffer[..read_count];
+                    if data[0] == PACKET_START {
+                        while data.len() > 0 {
+                            match Request::parse_bytes(data) {
+                                Ok((request, count)) => {
+                                    data = &data[count..];
+                                    match create_command_response(&request, &mut AMP_STATE.lock().unwrap(), Some(tx_send_queue.clone())) {
+                                        Ok(response) => {
+                                            debug!("process_a_connection: sending the response {:?}", &response);
+                                            match tx_send_queue.try_send(response.to_bytes()) {
+                                                Ok(_) => debug!("process_a_connection: put response on the queue."),
+                                                Err(e) => debug!("process_a_connection: failed to put response on the queue – {}", e),
+                                            };
+                                        },
+                                        Err(e) => debug!("process_a_connection: failed to process a request – {}", e),
+                                    }
+                                },
+                                Err(e) => debug!("process_a_connection: failed to parse {:?} as a request – {}", &data, e),
+                            }
                         }
-                    },
-                    Err(e) => {
-                        debug!("handle_a_connection:  failed to parse {:?} as a request – {}", &data, e);
-                        break;
-                    },
-                }
-            }
-        } else {
-            match from_utf8(&data) {
-                Ok(s) => {
-                    if s == "AMX\r" {
-                        debug!("process_a_connection: sending AMX response");
-                        let amx_response = "AMXB<Device-SDKClass=Receiver><Device-Make=ARCAM><Device-Model=AVR850><Device-Revision=2.0.0>\r";
-                        writer.write_all(amx_response.as_bytes()).await?
                     } else {
-                        debug!("process_a_connection: unknown message, doing nothing.");
+                        match from_utf8(&data) {
+                            Ok(s) => {
+                                if s == "AMX\r" {
+                                    debug!("process_a_connection: sending AMX response");
+                                    let amx_response = "AMXB<Device-SDKClass=Receiver><Device-Make=ARCAM><Device-Model=AVR850><Device-Revision=2.0.0>\r";
+                                    match tx_send_queue.try_send(amx_response.as_bytes().to_vec()) {
+                                        Ok(_) => debug!("process_a_connection: put AMX response on the queue."),
+                                        Err(e) => debug!("process_a_connection: failed to put AMX response on the queue – {}", e),
+                                    }
+                                } else {
+                                    debug!("process_a_connection: unknown message, doing nothing.");
+                                }
+                            },
+                            Err(e) => debug!("process_a_connection: buffer is not a string – {:?}", e),
+                        }
                     }
-                },
-                Err(e) => debug!("process_a_connection: buffer is not a string – {:?}", e),
-            }
-        }
+                }
+            },
+            Err(e) => debug!("process_a_connection: read failed – {}", e),
+        };
     }
-    Ok(())
 }
 
-/// Listen on localhost:<port_number> for connections and process each one.
+/// Create a mock amplifier and then listen for connections on the address provided.
 ///
 /// Although a real AVR850 will only listen on port 50000, this simulator allows for any port to
 /// support integration testing – tests may have to run faster than ports become available so
 /// reusing the same port is not feasible.
-async fn set_up_listener(port_number: u16) -> io::Result<()> {
-    let listener = TcpListener::bind(&("127.0.0.1:".to_string() + &port_number.to_string())).await?;
-    debug!("set_up_listener:  Listening on {}", listener.local_addr()?);
-    let mut incoming = listener.incoming();
-    while let Some(stream) = incoming.next().await {
-        let stream = stream?;
-        // TODO This spawn code allows for multiple concurrent connections, but an AVR850
-        //   only handles one connection at once. The question is whether an AVR850 accepts
-        //   the next connection and closes the previous one, or whether the more recent
-        //   connection request is rejected.
-        //
-        //task::spawn(async {
-        //    handle_a_connection(stream).await.unwrap();
-        //});
-        //
-        handle_a_connection(stream).await?;
+async fn do_the_connection_listener(port_number: u16) {
+    let server = SocketListener::new();
+    let address = gio::InetSocketAddress::new(&gio::InetAddress::new_from_string("127.0.0.1"), port_number);
+    server.add_address(&address, gio::SocketType::Stream, gio::SocketProtocol::Tcp, None::<&glib::Object>).expect("Failed to bind to address.");
+    debug!("do_the_connection_listener: Listening on {}:{}", gio::InetAddressExt::to_string(&address.get_address().unwrap()), address.get_port());
+    let mut incoming = server.incoming();
+    while let Some(socket_connection) = incoming.next().await {
+        let s_c = socket_connection.expect("Failed to get a proper SocketConnection.");
+        debug!("do_the_connection_listener: got something happening.");
+        let local_address = match s_c.get_local_address() {
+            Ok(s_a) => s_a.to_string(),
+            Err(_) => "error".to_string(),
+        };
+        let remote_address = match s_c.get_remote_address() {
+            Ok(s_a) => s_a.to_string(),
+            Err(_) => "error".to_string(),
+        };
+        debug!("do_the_connection_listener: got a connection on {} from {}", local_address, remote_address);
+        glib::MainContext::default().spawn_local(process_a_connection(s_c));
     }
-    Ok(())
+    debug!("do_the_connection_listener: finished.");
 }
 
 /// Start the mock AVR850.
@@ -404,13 +423,18 @@ async fn set_up_listener(port_number: u16) -> io::Result<()> {
 /// in order to support integration testing where using a single port number can lead to
 /// problems as a socket may not be closed as fast as new mocks are created. Testing must
 /// avoid "Unable to bind socket: Address already in use".
-fn main() -> io::Result<()> {
+fn main() {
     env_logger::init();
     let args: Vec<String> = args().collect();
-    debug!("main:  Args are {:?}", args);
+    debug!("main: args are {:?}", args);
     let default_port_number = 50000;
     let port_number = if args.len() > 1 { args[1].parse::<u16>().unwrap_or(default_port_number) } else { default_port_number };
-    task::block_on(set_up_listener(port_number))
+    debug!("main: about to start event loop.");
+    let context = glib::MainContext::default();
+    context.push_thread_default();
+    context.block_on(do_the_connection_listener(port_number));
+    context.pop_thread_default();
+    debug!("main: event loop terminated.");
 }
 
 #[cfg(test)]
