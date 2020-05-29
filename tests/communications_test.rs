@@ -138,7 +138,21 @@ fn communications_test() {
                 if s.len() == expected_1.len() {
                     assert!(false, "Got the wrong number of bytes.");
                 } else if s.len() == expected_1.len() + expected_2.len() {
-                    assert!(false, "Got the wrong number of bytes.");
+                    let mut expected = expected_1.clone();
+                    expected.extend(&expected_2);
+                    assert_eq!(s, expected);
+                    match receiver.next().await {
+                        Some(ss) => {
+                            if ss.len() == expected_3.len() + expected_4.len() {
+                                let mut expected = expected_3.clone();
+                                expected.extend(&expected_4);
+                                assert_eq!(ss, expected)
+                            } else {
+                                assert!(false, "Got the wrong number of bytes.");
+                            }
+                        },
+                        None => assert!(false, "Failed to get third and fourth response packet."),
+                    };
                 } else if s.len() == expected_1.len() + expected_2.len() + expected_3.len() {
                     let mut expected = expected_1.clone();
                     expected.extend(&expected_2);
