@@ -32,10 +32,17 @@ use futures;
 use futures::channel::mpsc::{Sender, Receiver};
 use futures::StreamExt;
 
-use arcamclient::arcam_protocol::{AnswerCode, Brightness, Command, Request, Response, Source, ZoneNumber, REQUEST_QUERY, RC5Command, get_rc5command_data};
+use arcamclient::arcam_protocol::{
+    AnswerCode, Brightness, Command, RC5Command, Request, Response, Source, ZoneNumber,
+    REQUEST_QUERY,
+    get_rc5command_data
+};
 use arcamclient::comms_manager;
 use arcamclient::control_window::ControlWindow;
-use arcamclient::functionality::{ResponseTuple, get_brightness_from_amp, get_source_from_amp, send_request_bytes, set_volume_on_amp, set_source_on_amp};
+use arcamclient::functionality::{
+    ResponseTuple,
+    get_brightness_from_amp, get_source_from_amp, send_request_bytes, set_volume_on_amp, set_source_on_amp,
+};
 
 use start_avr850::PORT_NUMBER;
 
@@ -48,109 +55,113 @@ use start_avr850::PORT_NUMBER;
 
 #[test]
 fn communications_test() {
-    //  Start up an application, no need for a UI.
-    let application = gtk::Application::new(Some("uk.org.winder.arcamclient.communications_test"), gio::ApplicationFlags::empty()).unwrap();
-    application.connect_startup(move |app| {
-        // Set up connection to the mock AVR850 process.
-        let (mut tx_queue, mut rx_queue) = futures::channel::mpsc::channel(10);
-        let (tx_from_comms_manager, rx_from_comms_manager) = glib::MainContext::channel(glib::source::PRIORITY_DEFAULT);
-        rx_from_comms_manager.attach(None, move |datum| {
-            match tx_queue.try_send(datum) {
-                Ok(_) => {},
-                Err(e) => assert!(false, e),
-            };
-            Continue(true)
-        });
-        let mut sender = match comms_manager::connect_to_amp( &tx_from_comms_manager, "127.0.0.1", unsafe { PORT_NUMBER }) {
-            Ok(s) => s,
-            Err(e) => panic!("~~~~ communications_test: failed to connect to the mock amp."),
+    let context = glib::MainContext::default();
+    context.push_thread_default();
+
+    // Set up connection to the mock AVR850 process.
+    let (mut tx_queue, mut rx_queue) = futures::channel::mpsc::channel(10);
+    let (tx_from_comms_manager, rx_from_comms_manager) = glib::MainContext::channel(glib::source::PRIORITY_DEFAULT);
+    rx_from_comms_manager.attach(None, move |datum| {
+        match tx_queue.try_send(datum) {
+            Ok(_) => {},
+            Err(e) => assert!(false, e),
         };
-        // Run the tests.
-        //
+        Continue(true)
+    });
+    let mut sender = match comms_manager::connect_to_amp( &tx_from_comms_manager, "127.0.0.1", unsafe { PORT_NUMBER }) {
+        Ok(s) => s,
+        Err(e) => panic!("~~~~ communications_test: failed to connect to the mock amp."),
+    };
+
+    async fn test_code(mut sender: Sender<Vec<u8>>, mut receiver: Receiver<Vec<u8>>) {
         // Currently there is an assumption of synchronous request/response. A real
         // AVR 850 does not provide such a guarantee, the question is whether the
         // mock AVR850 does.
-        glib::MainContext::default().spawn_local({
-            let a = app.clone();
-            async move {
 
-                get_brightness_from_amp(&mut sender);
-                // TODO It seems that the following .await causes the whole to terminate. Most times, but not always.
-                match rx_queue.next().await {
-                    Some(s) => assert_eq!(s, Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![Brightness::Level2 as u8]).unwrap().to_bytes()),
-                    None => assert!(false, "Failed to get a value from the response queue."),
-                };
+        get_brightness_from_amp(&mut sender);
+        // TODO It seems that the following .await causes the whole to terminate. Most times, but not always.
+        match receiver.next().await {
+            Some(s) => assert_eq!(s, Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![Brightness::Level2 as u8]).unwrap().to_bytes()),
+            None => assert!(false, "Failed to get a value from the response queue."),
+        };
 
-                set_volume_on_amp(&mut sender, ZoneNumber::One, 20);
-                match rx_queue.next().await {
-                    Some(s) => assert_eq!(s, Response::new(ZoneNumber::One, Command::SetRequestVolume, AnswerCode::StatusUpdate, vec![0x14]).unwrap().to_bytes()),
-                    None => assert!(false, "Failed to get a value from the response queue."),
-                };
+        set_volume_on_amp(&mut sender, ZoneNumber::One, 20);
+        match receiver.next().await {
+            Some(s) => assert_eq!(s, Response::new(ZoneNumber::One, Command::SetRequestVolume, AnswerCode::StatusUpdate, vec![0x14]).unwrap().to_bytes()),
+            None => assert!(false, "Failed to get a value from the response queue."),
+        };
 
-                get_source_from_amp(&mut sender, ZoneNumber::One);
-                match rx_queue.next().await {
-                    Some(s) => assert_eq!(s, Response::new(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::TUNER as u8]).unwrap().to_bytes()),
-                    None => assert!(false, "Failed to get a value from the response queue."),
-                };
+        get_source_from_amp(&mut sender, ZoneNumber::One);
+        match receiver.next().await {
+            Some(s) => assert_eq!(s, Response::new(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::CD as u8]).unwrap().to_bytes()),
+            None => assert!(false, "Failed to get a value from the response queue."),
+        };
 
-                // Send a multi-packet request. Do this by calling the comms_manage function directly.
-                let mut buffer = Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_QUERY]).unwrap().to_bytes();
-                buffer.append(&mut Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap().to_bytes());
-                send_request_bytes(&mut sender, &buffer);
-                match rx_queue.next().await {
-                    Some(s) => assert_eq!(s, Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![0x01]).unwrap().to_bytes()),
-                    None => assert!(false, "Failed to get a value from the response queue."),
-                };
-                match rx_queue.next().await {
-                    Some(s) => assert_eq!(s, Response::new(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::TUNER as u8]).unwrap().to_bytes()),
-                    None => assert!(false, "Failed to get a value from the response queue."),
-                };
-
-                // Set Zone 2 to CD and then to FollowZone1
-                set_source_on_amp(&mut sender, ZoneNumber::Two, Source::CD);
-                set_source_on_amp(&mut sender, ZoneNumber::Two, Source::FollowZone1);
-                match rx_queue.next().await {
-                    Some(s) => {
-                        let rc5_command = get_rc5command_data(RC5Command::CD);
-                        let rc5_data = vec![rc5_command.0, rc5_command.1];
-                        assert_eq!(s, Response::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, rc5_data).unwrap().to_bytes())
-                    },
-                    None => assert!(false, "Failed to get a value from the response queue."),
-                };
-                match rx_queue.next().await {
-                    Some(s) => assert_eq!(s, Response::new(ZoneNumber::Two, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::CD as u8]).unwrap().to_bytes()),
-                    None => assert!(false, "Failed to get a value from the response queue."),
-                };
-                match rx_queue.next().await {
-                    Some(s) => {
-                        let rc5_command = get_rc5command_data(RC5Command::SetZone2ToFollowZone1);
-                        let rc5_data = vec![rc5_command.0, rc5_command.1];
-                        assert_eq!(s, Response::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, rc5_data).unwrap().to_bytes())
-                    },
-                    None => assert!(false, "Failed to get a value from the response queue."),
-                };
-                match rx_queue.next().await {
-                    Some(s) => assert_ne!(s, Response::new(ZoneNumber::Two, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::FollowZone1 as u8]).unwrap().to_bytes()),
-                    None => assert!(false, "Failed to get a value from the response queue."),
-                };
-
-                assert_eq!(1, 2);  // This line fails to execute.
-
-                // Add the application quit event once there is no other event.
-                glib::idle_add_local({
-                    let aa = a.clone();
-                    move ||{
-                        if glib::MainContext::default().pending() {
-                            Continue(true)
-                        } else {
-                            aa.quit();
-                            Continue(false)
-                        }
+        // Send a multi-packet request. Do this by calling the comms_manage function directly.
+        let mut buffer = Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_QUERY]).unwrap().to_bytes();
+        buffer.append(&mut Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap().to_bytes());
+        let expected_1 = Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![Brightness::Level2 as u8]).unwrap().to_bytes();
+        let expected_2 = Response::new(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::CD as u8]).unwrap().to_bytes();
+        send_request_bytes(&mut sender, &buffer);
+        match receiver.next().await {
+            Some(s) => {
+                if s.len() == expected_1.len() {
+                    assert_eq!(s, expected_1);
+                    match receiver.next().await {
+                        Some(ss) => assert_eq!(ss, expected_2),
+                        None => assert!(false, "Failed to get second response packet."),
                     }
-                });
-            }
-        });
-    });
-    application.connect_activate(|_|{}); // Avoids a warning.
-    application.run(&[]);
+                } else if s.len() > expected_1.len() {
+                    let mut expected = expected_1.clone();
+                    expected.extend(&expected_2);
+                    assert_eq!(s, expected);
+                } else {
+                    assert!(false, "Failed to get sufficient bytes for a response packet.");
+                }
+            },
+            None => assert!(false, "Failed to get a value from the response queue."),
+        };
+
+        // Set Zone 2 to CD and then to FollowZone1
+        set_source_on_amp(&mut sender, ZoneNumber::Two, Source::CD);
+        set_source_on_amp(&mut sender, ZoneNumber::Two, Source::FollowZone1);
+        let rc5_command = get_rc5command_data(RC5Command::CD);
+        let rc5_data = vec![rc5_command.0, rc5_command.1];
+        let expected_1 = Response::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, rc5_data).unwrap().to_bytes();
+        let expected_2 = Response::new(ZoneNumber::Two, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::CD as u8]).unwrap().to_bytes();
+        let rc5_command = get_rc5command_data(RC5Command::SetZone2ToFollowZone1);
+        let rc5_data = vec![rc5_command.0, rc5_command.1];
+        let expected_3 = Response::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, rc5_data).unwrap().to_bytes();
+        let expected_4 = Response::new(ZoneNumber::Two, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::FollowZone1 as u8]).unwrap().to_bytes();
+        match receiver.next().await {
+            Some(s) => {
+                if s.len() == expected_1.len() {
+                    assert!(false, "Got the wrong number of bytes.");
+                } else if s.len() == expected_1.len() + expected_2.len() {
+                    assert!(false, "Got the wrong number of bytes.");
+                } else if s.len() == expected_1.len() + expected_2.len() + expected_3.len() {
+                    let mut expected = expected_1.clone();
+                    expected.extend(&expected_2);
+                    expected.extend(&expected_3);
+                    assert_eq!(s, expected);
+                   match receiver.next().await {
+                        Some(ss) => assert_eq!(ss, expected_4),
+                        None => assert!(false, "Failed to get fourth response packet."),
+                    };
+                } else if s.len() == expected_1.len() + expected_2.len() + expected_3.len() + expected_4.len() {
+                    let mut expected = expected_1.clone();
+                    expected.extend(&expected_2);
+                    expected.extend(&expected_3);
+                    expected.extend(&expected_4);
+                    assert_eq!(s, expected)
+                } else {
+                    assert!(false, "Got the wrong number of bytes.");
+                }
+            },
+            None => assert!(false, "Failed to get a value from the response queue."),
+        };
+    }
+
+    context.block_on(test_code(sender, rx_queue));
+    context.pop_thread_default();
 }
