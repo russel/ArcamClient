@@ -17,42 +17,53 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*!
-A program to simulate a AVR850 so that integration tests of the Arcam client can be undertaken.
-
-The process opens port 50000 and listens for TCP packets using the Arcam IR remote control
-protocol. Replies to queries must be sent within three seconds of the request being received. NB
-This is an asynchronous question/answer system not a synchronous one.
-
-When on a DAB radio such as Smooth, AVR850s send out
-Command::RequestRDSDLSInformation response packets on a regular basis without
-any prior request. So packets such as:
-
-  [33, 1, 26, 0, 129, 12, 79, 110, 32, 65, 105, 114, 32, 78, 111, 119, 32, 111, 110, 32, 83, 109, 111, 111, 116, 104, 58, 32, 71, 97, 114, 121, 32, 75, 105, 110, 103, 0, 0, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32]
-
-get sent out . They are always 129 long data packets containing a zero
-terminates string. So in the above case:
-
- 'O', 'n', ' ', 'A', 'i', 'r', ' ', 'N', 'o', 'w', ' ', 'o', 'n', ' ', 'S', 'm', 'o', 'o', 't', 'h', ':', ' ', 'G', 'a', 'r', 'y', ' ', 'K', 'i', 'n', 'g'
- "On Air Now on Smooth: Gary King."
-
-also seen is the string:
-
-  "Smooth - Your Relaxing Music Mix"
-
-On a channel change some packets got emitted:
-
-[33, 1, 24, 0, 16, 83, 109, 111, 111, 116, 104, 32, 67, 111, 117, 110, 116, 114, 121, 32, 32, 13]
-[33, 1, 25, 0, 16, 67, 111, 117, 110, 116, 114, 121, 32, 77, 117, 115, 105, 99, 32, 32, 32, 13]
-[33, 1, 26, 0, 129, 25, 78, 111, 119, 32, 111, 110, 32, 83, 109, 111, 111, 116, 104, 32, 67,
-111, 117, 110, 116, 114, 121, 58, 32, 66, 114, 101, 116, 116, 32, 69, 108, 100, 114, 101, 100,
-103, 101, 32, 119, 105, 116, 104, 32, 68, 114, 117, 110, 107, 32, 79, 110, 32, 89, 111, 117,
-114, 32, 76, 111, 118, 101, 0, 0, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
-32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
-32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
-32, 32, 13]
-
-*/
+//! A program to simulate (aka mock) a AVR850 so that integration tests of ArcamClient can be
+//! undertaken.
+//!
+//! The process opens a port on localhost, by default 50000, and listens for connections.  A
+//! real AVR850 accepts only a single connection at a time. If a new connection arrives it
+//! closes the prior connection. This behaviour is not yet replicated by this mock.
+//!
+//! TCP packets received must either be AMX requests or requests that use the Arcam packet
+//! protocol. Replies to queries are sent within three seconds of the request being received. NB
+//! This is an asynchronous question/answer system not a synchronous one.
+//!
+//! When on a DAB radio such as Smooth, an AVR850 sends out Command::DLSPDTInformation response
+//! packets on a regular basis without any prior request. So packets such as:
+//!
+//!  [33, 1, 26, 0, 129, 12, 79, 110, 32, 65, 105, 114, 32, 78, 111, 119, 32, 111, 110, 32,
+//!   83, 109, 111, 111, 116, 104, 58, 32, 71, 97, 114, 121, 32, 75, 105, 110, 103, 0, 0,
+//!   32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+//!   32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+//!   32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+//!   32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+//!   32, 32, 32, 32, 32, 32, 32]
+//!
+//! get sent out. They are always 129 long data packets containing a nul terminated string –
+//! double nul in this case, assumed single nul terminated for 128 character strings.  So in
+//! this case:
+//!
+//!  'O', 'n', ' ', 'A', 'i', 'r', ' ', 'N', 'o', 'w', ' ', 'o', 'n', ' ', 'S', 'm', 'o', 'o', 't', 'h', ':', ' ', 'G', 'a', 'r', 'y', ' ', 'K', 'i', 'n', 'g'
+//!
+//! or
+//!
+//!  "On Air Now on Smooth: Gary King."
+//!
+//! This is different to what is stated in the documentation.  also seen is the string:
+//!
+//!  "Smooth - Your Relaxing Music Mix"
+//!
+//! On a channel change some packets got emitted:
+//!
+//! [33, 1, 24, 0, 16, 83, 109, 111, 111, 116, 104, 32, 67, 111, 117, 110, 116, 114, 121, 32, 32, 13]
+//! [33, 1, 25, 0, 16, 67, 111, 117, 110, 116, 114, 121, 32, 77, 117, 115, 105, 99, 32, 32, 32, 13]
+//! [33, 1, 26, 0, 129, 25, 78, 111, 119, 32, 111, 110, 32, 83, 109, 111, 111, 116, 104, 32, 67,
+//! 111, 117, 110, 116, 114, 121, 58, 32, 66, 114, 101, 116, 116, 32, 69, 108, 100, 114, 101, 100,
+//! 103, 101, 32, 119, 105, 116, 104, 32, 68, 114, 117, 110, 107, 32, 79, 110, 32, 89, 111, 117,
+//! 114, 32, 76, 111, 118, 101, 0, 0, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+//! 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+//! 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+//! 32, 32, 13]
 
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -271,10 +282,9 @@ fn create_command_response(request: &Request, amp_state: &mut AmpState, sender: 
     }
 }
 
-/// When an AVR850 is using an FM or DAB tuner (aka radio) source, it sends out extra
-/// DLS/PDT packets. These normally provide information about the show currently on the
-/// station and the piece currently being played. Simulate this without even trying to
-/// be too realistic.
+/// When an AVR850 is using an FM or DAB tuner (aka radio) source, it sends out extra DLS/PDT
+/// packets. These normally provide information about the show currently on the station and the
+/// piece currently being played. Simulate this without even trying to be too realistic.
 async fn send_tuner_data_and_start_dls_pdt_sending(zone: ZoneNumber, mut sender: futures::channel::mpsc::Sender<Vec<u8>>) {
     // TODO What about FM as well as DAB?
     // Station name is always 16 bytes long.
@@ -292,11 +302,11 @@ async fn send_tuner_data_and_start_dls_pdt_sending(zone: ZoneNumber, mut sender:
         move || {
             let zone_source = AMP_STATE.lock().unwrap().zones[&zone].source.get();
             if zone_source == Source::TUNER || zone_source == Source::TUNERDAB {
-            // DLS/PDT data is always 128 bytes long according to the manual, but experiment
-            // indicates a real AVR850 returns 129 characters.The manual states that the
-            // string is padded with spaces to fill the 128 characters. A real AVR850 seems
-            // to null terminate the string, with two nulls and then pad the 129 characters
-            // with space.
+                // DLS/PDT data is always 128 bytes long according to the manual, but experiment
+                // indicates a real AVR850 returns 129 characters.The manual states that the
+                // string is padded with spaces to fill the 128 characters. A real AVR850 seems
+                // to null terminate the string, with two nulls and then pad the 129 characters
+                // with space.
                 let mut dls_pdt_buffer = [' ' as u8; 129];
                 // Quite weird that elapsed doesn't return zero!
                 let dsl_pdt_data = format!("This DLS/PDT information sent after {:?}", SystemTime::now().elapsed().unwrap());
@@ -324,16 +334,30 @@ async fn send_tuner_data_and_start_dls_pdt_sending(zone: ZoneNumber, mut sender:
     });
 }
 
+// Make it easier to display the InetSocketAddress in a human readable form for debugging.
+fn create_string_for_inetsocketaddress(address: &gio::InetSocketAddress) -> String {
+    format!("{}:{}", gio::InetAddressExt::to_string(&address.get_address().unwrap()), address.get_port())
+}
+
+// Make it easier to display the SocketAddress in a human readable form for debugging.
+fn create_string_for_socketaddress(address: &gio::SocketAddress) -> String {
+    create_string_for_inetsocketaddress(&address.clone().downcast::<gio::InetSocketAddress>().unwrap())
+}
+
 /// Handle a connection from a remote client.
-async fn process_a_connection(connection: SocketConnection) {
-    debug!("handle_client: processing the connection from {:?}", &connection.get_remote_address());
+///
+/// Read Request byte sequences as they arrive, parse them to create Requests and then send a
+/// Response as a real AVR850 might.
+async fn process_connection(connection: SocketConnection) {
+    let remote_address = connection.get_remote_address().unwrap();
+    debug!("process_connection: connection from {}", &create_string_for_socketaddress(&remote_address));
     let (mut reader, mut writer) = connection.split();
     let(mut tx_send_queue, mut rx_send_queue) = futures::channel::mpsc::channel::<Vec<u8>>(10);
     glib::MainContext::default().spawn_local(async move {
         while let Some(data) = rx_send_queue.next().await {
             match writer.write_all(&data).await {
-                Ok(_) => { debug!("process_a_connection: successfully sent data {:?}", &data) },
-                Err(e) => { debug!("process_a_connection: error sending data – {:?}", e) },
+                Ok(_) => { debug!("process_connection: successfully sent data {:?}", &data) },
+                Err(e) => { debug!("process_connection: error sending data – {:?}", e) },
             }
         }
     });
@@ -342,97 +366,99 @@ async fn process_a_connection(connection: SocketConnection) {
         match reader.read(&mut buffer).await {
             Ok(read_count) => {
                 if read_count == 0 {
-                    debug!("process_a_connection: zero length read, assuming connection closed.");
+                    debug!("process_connection: zero length read, assuming connection from {} closed.", &create_string_for_socketaddress(&remote_address));
                     break;
                 } else {
                     let mut data = &buffer[..read_count];
                     if data[0] == PACKET_START {
+                        // Process an Arcam packet. There may be more than one packet in this TCP message.
+                        // TODO What happens if there is an AMX\r within the TCP message?
                         while data.len() > 0 {
                             match Request::parse_bytes(data) {
                                 Ok((request, count)) => {
                                     data = &data[count..];
                                     match create_command_response(&request, &mut AMP_STATE.lock().unwrap(), Some(tx_send_queue.clone())) {
                                         Ok(response) => {
-                                            debug!("process_a_connection: sending the response {:?}", &response);
+                                            debug!("process_connection: sending the response {:?}", &response);
                                             match tx_send_queue.try_send(response.to_bytes()) {
-                                                Ok(_) => debug!("process_a_connection: put response on the queue."),
-                                                Err(e) => debug!("process_a_connection: failed to put response on the queue – {}", e),
+                                                Ok(_) => debug!("process_connection: put response on the queue."),
+                                                Err(e) => debug!("process_connection: failed to put response on the queue – {}", e),
                                             };
                                         },
-                                        Err(e) => debug!("process_a_connection: failed to process a request – {}", e),
-                                    }
+                                        Err(e) => debug!("process_connection: failed to process a request – {}", e),
+                                    };
                                 },
-                                Err(e) => debug!("process_a_connection: failed to parse {:?} as a request – {}", &data, e),
-                            }
+                                Err(e) => debug!("process_connection: failed to parse {:?} as a request – {}", &data, e),
+                            };
                         }
                     } else {
-                        match from_utf8(&data) {
-                            Ok(s) => {
-                                if s == "AMX\r" {
-                                    debug!("process_a_connection: sending AMX response");
-                                    let amx_response = "AMXB<Device-SDKClass=Receiver><Device-Make=ARCAM><Device-Model=AVR850><Device-Revision=2.0.0>\r";
-                                    match tx_send_queue.try_send(amx_response.as_bytes().to_vec()) {
-                                        Ok(_) => debug!("process_a_connection: put AMX response on the queue."),
-                                        Err(e) => debug!("process_a_connection: failed to put AMX response on the queue – {}", e),
-                                    }
-                                } else {
-                                    debug!("process_a_connection: unknown message, doing nothing.");
-                                }
-                            },
-                            Err(e) => debug!("process_a_connection: buffer is not a string – {:?}", e),
+                        debug!("process_connection: received a non-packet message – {:?}", &data);
+                        // Experimentation with a real AVR850 indicates that it responds with
+                        // an AMXB response to any and all messages that are not Arcam packets.
+                        let amx_response = "AMXB<Device-SDKClass=Receiver><Device-Make=ARCAM><Device-Model=AVR850><Device-Revision=2.0.0>\r";
+                        match tx_send_queue.try_send(amx_response.as_bytes().to_vec()) {
+                            Ok(_) => debug!("process_connection: put AMX response on the queue."),
+                            Err(e) => debug!("process_connection: failed to put AMX response on the queue – {}", e),
                         }
                     }
                 }
             },
-            Err(e) => debug!("process_a_connection: read failed – {}", e),
+            Err(e) => debug!("process_connection: read failed – {}", e),
         };
     }
 }
 
-/// Create a mock amplifier and then listen for connections on the address provided.
+/// Listen on localhost:<port_number> for connections and process each one.
 ///
-/// Although a real AVR850 will only listen on port 50000, this simulator allows for any port to
-/// support integration testing – tests may have to run faster than ports become available so
-/// reusing the same port is not feasible.
-async fn do_the_connection_listener(port_number: u16) {
+/// Although a real AVR850 listens only on port 50000, this simulator allows for any port to
+/// support integration testing – tests may have to run faster than ports become available after
+/// being closed, so reusing the same port is not feasible.
+async fn run_connection_listener(port_number: u16) {
     let server = SocketListener::new();
     let address = gio::InetSocketAddress::new(&gio::InetAddress::new_from_string("127.0.0.1"), port_number);
     server.add_address(&address, gio::SocketType::Stream, gio::SocketProtocol::Tcp, None::<&glib::Object>).expect("Failed to bind to address.");
-    debug!("do_the_connection_listener: Listening on {}:{}", gio::InetAddressExt::to_string(&address.get_address().unwrap()), address.get_port());
+    debug!("run_connection_listener: Listening on {}", &create_string_for_inetsocketaddress(&address));
     let mut incoming = server.incoming();
+    // A real AVR only allows one connection at a time. If a second connection request arrives,
+    // the old connection is closed in favour of the new one. This cannot be implemented easily
+    // just now because it is not possible to clone gio_futures::SocketConnection.
     while let Some(socket_connection) = incoming.next().await {
-        let s_c = socket_connection.expect("Failed to get a proper SocketConnection.");
-        debug!("do_the_connection_listener: got something happening.");
-        let local_address = match s_c.get_local_address() {
-            Ok(s_a) => s_a.to_string(),
-            Err(_) => "error".to_string(),
-        };
-        let remote_address = match s_c.get_remote_address() {
-            Ok(s_a) => s_a.to_string(),
-            Err(_) => "error".to_string(),
-        };
-        debug!("do_the_connection_listener: got a connection on {} from {}", local_address, remote_address);
-        glib::MainContext::default().spawn_local(process_a_connection(s_c));
+        match socket_connection {
+            Ok(s_c) => {
+                let local_address = match s_c.get_local_address() {
+                    Ok(s_a) => create_string_for_socketaddress(&s_a),
+                    Err(_) => "error".to_string(),
+                };
+                let remote_address = match s_c.get_remote_address() {
+                    Ok(s_a) => create_string_for_socketaddress(&s_a),
+                    Err(_) => "error".to_string(),
+                };
+                debug!("run_connection_listener: got a connection on {} from {}", local_address, remote_address);
+                glib::MainContext::default().spawn_local(process_connection(s_c));
+            },
+            Err(e) => debug!("Got an errorful connection request – {}", e),
+        }
+
     }
-    debug!("do_the_connection_listener: finished.");
+    debug!("run_connection_listener: finished.");
 }
 
 /// Start the mock AVR850.
 ///
-/// A real AVR850 only listens on port 50000, but this mock is allowed to listen on any port
-/// in order to support integration testing where using a single port number can lead to
-/// problems as a socket may not be closed as fast as new mocks are created. Testing must
-/// avoid "Unable to bind socket: Address already in use".
+/// A real AVR850 listens only on port 50000, but this mock is allowed to listen on any port in
+/// order to support integration testing where using a single port number can lead to problems
+/// as a socket may not be available for use after being closed as fast as new mocks are
+/// created. Testing must avoid "Unable to bind socket: Address already in use".
 fn main() {
     env_logger::init();
     let args: Vec<String> = args().collect();
     debug!("main: args are {:?}", args);
     let default_port_number = 50000;
     let port_number = if args.len() > 1 { args[1].parse::<u16>().unwrap_or(default_port_number) } else { default_port_number };
-    debug!("main: about to start event loop.");
+    debug!("main: starting event loop.");
     let context = glib::MainContext::default();
     context.push_thread_default();
-    context.block_on(do_the_connection_listener(port_number));
+    context.block_on(run_connection_listener(port_number));
     context.pop_thread_default();
     debug!("main: event loop terminated.");
 }
