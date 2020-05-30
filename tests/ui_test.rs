@@ -68,6 +68,8 @@ fn ui_test() {
             let c_w = control_window.clone();
             async move {
 
+                println!("XXXX  starting the tests.");
+
                 // This should trigger a change to a volume ScrollButton and therefore
                 // send a message to the amp.
                 c_w.set_volume_chooser(ZoneNumber::One, 20.0);
@@ -75,6 +77,8 @@ fn ui_test() {
                     Some(s) => assert_eq!(s, Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![0x14]).unwrap().to_bytes()),
                     None => assert!(false, "Failed to get a value from the request queue."),
                 };
+
+                println!("XXXX  set_volume_chooser.");
 
                 // Set Zone 2 to CD and then to FollowZone1
                 c_w.set_source_chooser(ZoneNumber::Two, Source::CD);
@@ -84,10 +88,16 @@ fn ui_test() {
                     Some(s) => assert_eq!(s, Request::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, rc5_data).unwrap().to_bytes()),
                     None => assert!(false, "Failed to get a value from the request queue."),
                 };
+
+                println!("XXXX  set_source_chooser CD responded.");
+
                 match rx_queue.next().await {
                     Some(s) => assert_eq!(s, Request::new(ZoneNumber::Two, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap().to_bytes()),
                     None => assert!(false, "Failed to get a value from the request queue."),
                 };
+
+                println!("XXXX  set_source_chooser CD queried.");
+
                 c_w.set_source_chooser(ZoneNumber::Two, Source::FollowZone1);
                 let rc5_command = get_rc5command_data(RC5Command::SetZone2ToFollowZone1);
                 let rc5_data = vec![rc5_command.0, rc5_command.1];
@@ -95,18 +105,29 @@ fn ui_test() {
                     Some(s) => assert_eq!(s, Request::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, rc5_data).unwrap().to_bytes()),
                     None => assert!(false, "Failed to get a value from the request queue."),
                 };
+
+                println!("XXXX  set_source_chooser FollowZone1 responded.");
+
                 match rx_queue.next().await {
                     Some(s) => assert_eq!(s, Request::new(ZoneNumber::Two, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap().to_bytes()),
                     None => assert!(false, "Failed to get a value from the request queue."),
                 };
 
+                println!("XXXX  set_source_chooser FollowZone1 queried.");
+
                 // Add the application quit event once there is no other event.
                 glib::idle_add_local({
                     let aa = a.clone();
                     move || {
+
+                        println!("ZZZZ  Attempt to quit.");
+
                         if glib::MainContext::default().pending() {
                             Continue(true)
                         } else {
+
+                            println!("ZZZZ  Quitting.");
+
                             aa.quit();
                             Continue(false)
                         }

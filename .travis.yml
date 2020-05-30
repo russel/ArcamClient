@@ -11,5 +11,5 @@ before_script:
 
 script:
   - cargo build
-  - xvfb-run cargo test
+  - xvfb-run cargo test -- --nocapture
   - cargo build --release
