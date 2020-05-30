@@ -111,12 +111,12 @@ fn communications_test() {
                         Some(ss) => assert_eq!(ss, expected_2),
                         None => assert!(false, "Failed to get second response packet."),
                     }
-                } else if s.len() > expected_1.len() {
+                } else if s.len() == expected_1.len() + expected_2.len() {
                     let mut expected = expected_1.clone();
                     expected.extend(&expected_2);
                     assert_eq!(s, expected);
                 } else {
-                    assert!(false, "Failed to get sufficient bytes for a response packet.");
+                    assert!(false, "Failed to get correct number of bytes for one or two response packets.");
                 }
             },
             None => assert!(false, "Failed to get a value from the response queue."),
@@ -133,47 +133,21 @@ fn communications_test() {
         let rc5_data = vec![rc5_command.0, rc5_command.1];
         let expected_3 = Response::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, rc5_data).unwrap().to_bytes();
         let expected_4 = Response::new(ZoneNumber::Two, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::FollowZone1 as u8]).unwrap().to_bytes();
-        match receiver.next().await {
-            Some(s) => {
-                if s.len() == expected_1.len() {
-                    assert!(false, "Got the wrong number of bytes.");
-                } else if s.len() == expected_1.len() + expected_2.len() {
-                    let mut expected = expected_1.clone();
-                    expected.extend(&expected_2);
-                    assert_eq!(s, expected);
-                    match receiver.next().await {
-                        Some(ss) => {
-                            if ss.len() == expected_3.len() + expected_4.len() {
-                                let mut expected = expected_3.clone();
-                                expected.extend(&expected_4);
-                                assert_eq!(ss, expected)
-                            } else {
-                                assert!(false, "Got the wrong number of bytes.");
-                            }
-                        },
-                        None => assert!(false, "Failed to get third and fourth response packet."),
-                    };
-                } else if s.len() == expected_1.len() + expected_2.len() + expected_3.len() {
-                    let mut expected = expected_1.clone();
-                    expected.extend(&expected_2);
-                    expected.extend(&expected_3);
-                    assert_eq!(s, expected);
-                   match receiver.next().await {
-                        Some(ss) => assert_eq!(ss, expected_4),
-                        None => assert!(false, "Failed to get fourth response packet."),
-                    };
-                } else if s.len() == expected_1.len() + expected_2.len() + expected_3.len() + expected_4.len() {
-                    let mut expected = expected_1.clone();
-                    expected.extend(&expected_2);
-                    expected.extend(&expected_3);
-                    expected.extend(&expected_4);
-                    assert_eq!(s, expected)
-                } else {
-                    assert!(false, "Got the wrong number of bytes.");
-                }
-            },
-            None => assert!(false, "Failed to get a value from the response queue."),
-        };
+        let mut expected_packets = vec![expected_1, expected_2, expected_3, expected_4];
+        while expected_packets.len() > 0 {
+            match receiver.next().await {
+                Some(response) => {
+                    let expected_lengths = expected_packets.iter().map(|x| x.len()).scan(0, |s, x| { *s += x; Some(*s) }).collect::<Vec<usize>>();
+                    assert!(expected_lengths.contains(&response.len()), "Got the response {:?} which didn't have an expected length {:?}", &response, &expected_lengths);
+                    let index = expected_lengths.iter().position(|x| *x == response.len() ).unwrap() + 1;
+                    let data = expected_packets[.. index].to_vec();
+                    expected_packets = expected_packets[index ..].to_vec();
+                    let data_bytes = data.into_iter().flatten().collect::<Vec<u8>>();
+                    assert_eq!(response, data_bytes);
+                },
+                None => assert!(false, "Read of responses failed."),
+            }
+        }
     }
 
     context.block_on(test_code(sender, rx_queue));
