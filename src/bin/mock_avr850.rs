@@ -68,7 +68,6 @@
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::env::args;
-use std::str::from_utf8;
 use std::sync::Mutex;
 use std::time::SystemTime;
 
@@ -436,7 +435,7 @@ async fn run_connection_listener(port_number: u16) {
                 debug!("run_connection_listener: got a connection on {} from {}", local_address, remote_address);
                 glib::MainContext::default().spawn_local(process_connection(s_c));
             },
-            Err(e) => debug!("Got an errorful connection request – {}", e),
+            Err(e) => debug!("run_connection_listener: got an errorful connection request – {}", e),
         }
 
     }
