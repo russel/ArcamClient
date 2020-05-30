@@ -116,6 +116,15 @@ fn ui_test() {
                 println!("XXXX  set_source_chooser FollowZone1 queried.");
 
                 // Add the application quit event once there is no other event.
+                //
+                // Whilst this works locally and on GitLab, it fails on Travis-CI.
+                // It appears that on Travis-CI glib::MainContext::default().pending()
+                // always delivers true. Given that it all works on GitLab and locally,
+                // we must assume that there is a difference between glib 2.56/gtk 3.22
+                // on Bionic on Travis-CI and glib 2.58/gtk 3.24 on Buster on GitLab
+                // that explains this. For now use a sledgehammer approach on all
+                // platforms.
+                /*
                 glib::idle_add_local({
                     let aa = a.clone();
                     move || {
@@ -131,6 +140,14 @@ fn ui_test() {
                             aa.quit();
                             Continue(false)
                         }
+                    }
+                });
+                 */
+                glib::timeout_add_seconds_local(1, {
+                    let aa = a.clone();
+                    move || {
+                        aa.quit();
+                        Continue(false)
                     }
                 });
             }
