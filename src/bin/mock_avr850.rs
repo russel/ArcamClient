@@ -65,6 +65,10 @@
 //! 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
 //! 32, 32, 13]
 
+// Required for the select macro. The value is that reported by rustc as the required one.
+
+#![recursion_limit="512"]
+
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::env::args;
@@ -347,7 +351,10 @@ fn create_string_for_socketaddress(address: &gio::SocketAddress) -> String {
 ///
 /// Read Request byte sequences as they arrive, parse them to create Requests and then send a
 /// Response as a real AVR850 might.
-async fn process_connection(connection: SocketConnection) {
+async fn process_connection(
+    connection: SocketConnection,
+    stop_receiver: futures::channel::oneshot::Receiver<()>,
+    response_sender: futures::channel::oneshot::Sender<()>) {
     let remote_address = connection.get_remote_address().unwrap();
     debug!("process_connection: connection from {}", &create_string_for_socketaddress(&remote_address));
     let (mut reader, mut writer) = connection.split();
@@ -360,51 +367,61 @@ async fn process_connection(connection: SocketConnection) {
             }
         }
     });
+    let mut stop_receiver_fused = stop_receiver.fuse();
     loop {
         let mut buffer = [0u8; 1024];  // Must be bigger than the byte size of the maximum number of simultaneous packets receivable.
-        match reader.read(&mut buffer).await {
-            Ok(read_count) => {
-                if read_count == 0 {
-                    debug!("process_connection: zero length read, assuming connection from {} closed.", &create_string_for_socketaddress(&remote_address));
-                    break;
-                } else {
-                    let mut data = &buffer[..read_count];
-                    if data[0] == PACKET_START {
-                        // Process an Arcam packet. There may be more than one packet in this TCP message.
-                        // TODO What happens if there is an AMX\r within the TCP message?
-                        while data.len() > 0 {
-                            match Request::parse_bytes(data) {
-                                Ok((request, count)) => {
-                                    data = &data[count..];
-                                    match create_command_response(&request, &mut AMP_STATE.lock().unwrap(), Some(tx_send_queue.clone())) {
-                                        Ok(response) => {
-                                            debug!("process_connection: sending the response {:?}", &response);
-                                            match tx_send_queue.try_send(response.to_bytes()) {
-                                                Ok(_) => debug!("process_connection: put response on the queue."),
-                                                Err(e) => debug!("process_connection: failed to put response on the queue – {}", e),
+        futures::select! {
+            _ = stop_receiver_fused => {
+                response_sender.send(()).unwrap();
+                break;
+            }
+            read_result = reader.read(&mut buffer).fuse() => {
+                match read_result {
+                    Ok(read_count) => {
+                        if read_count == 0 {
+                            debug!("process_connection: zero length read, assuming connection from {} closed.", &create_string_for_socketaddress(&remote_address));
+                            break;
+                        } else {
+                            let mut data = &buffer[..read_count];
+                            if data[0] == PACKET_START {
+                                // Process an Arcam packet. There may be more than one packet in this TCP message.
+                                // TODO What happens if there is an AMX\r within the TCP message?
+                                while data.len() > 0 {
+                                    match Request::parse_bytes(data) {
+                                        Ok((request, count)) => {
+                                            data = &data[count..];
+                                            match create_command_response(&request, &mut AMP_STATE.lock().unwrap(), Some(tx_send_queue.clone())) {
+                                                Ok(response) => {
+                                                    debug!("process_connection: sending the response {:?}", &response);
+                                                    match tx_send_queue.try_send(response.to_bytes()) {
+                                                        Ok(_) => debug!("process_connection: put response on the queue."),
+                                                        Err(e) => debug!("process_connection: failed to put response on the queue – {}", e),
+                                                    };
+                                                },
+                                                Err(e) => debug!("process_connection: failed to process a request – {}", e),
                                             };
                                         },
-                                        Err(e) => debug!("process_connection: failed to process a request – {}", e),
+                                        Err(e) => debug!("process_connection: failed to parse {:?} as a request – {}", &data, e),
                                     };
-                                },
-                                Err(e) => debug!("process_connection: failed to parse {:?} as a request – {}", &data, e),
-                            };
+                                }
+                            } else {
+                                debug!("process_connection: received a non-packet message – {:?}", &data);
+                                // Experimentation with a real AVR850 indicates that it responds with
+                                // an AMXB response to any and all messages that are not Arcam packets.
+                                let amx_response = "AMXB<Device-SDKClass=Receiver><Device-Make=ARCAM><Device-Model=AVR850><Device-Revision=2.0.0>\r";
+                                match tx_send_queue.try_send(amx_response.as_bytes().to_vec()) {
+                                    Ok(_) => debug!("process_connection: put AMX response on the queue."),
+                                    Err(e) => debug!("process_connection: failed to put AMX response on the queue – {}", e),
+                                }
+                            }
                         }
-                    } else {
-                        debug!("process_connection: received a non-packet message – {:?}", &data);
-                        // Experimentation with a real AVR850 indicates that it responds with
-                        // an AMXB response to any and all messages that are not Arcam packets.
-                        let amx_response = "AMXB<Device-SDKClass=Receiver><Device-Make=ARCAM><Device-Model=AVR850><Device-Revision=2.0.0>\r";
-                        match tx_send_queue.try_send(amx_response.as_bytes().to_vec()) {
-                            Ok(_) => debug!("process_connection: put AMX response on the queue."),
-                            Err(e) => debug!("process_connection: failed to put AMX response on the queue – {}", e),
-                        }
-                    }
-                }
-            },
-            Err(e) => debug!("process_connection: read failed – {}", e),
-        };
+                    },
+                    Err(e) => debug!("process_connection: read failed – {}", e),
+                };
+            }
+        }
     }
+    debug!("process_connection: terminating connection with {:?}", &create_string_for_socketaddress(&remote_address));
 }
 
 /// Listen on localhost:<port_number> for connections and process each one.
@@ -412,6 +429,8 @@ async fn process_connection(connection: SocketConnection) {
 /// Although a real AVR850 listens only on port 50000, this simulator allows for any port to
 /// support integration testing – tests may have to run faster than ports become available after
 /// being closed, so reusing the same port is not feasible.
+///
+/// As with a real AVR850 this mock drops connections when a new connection request arrives.
 async fn run_connection_listener(port_number: u16) {
     let server = SocketListener::new();
     let address = gio::InetSocketAddress::new(&gio::InetAddress::new_from_string("127.0.0.1"), port_number);
@@ -419,11 +438,29 @@ async fn run_connection_listener(port_number: u16) {
     debug!("run_connection_listener: Listening on {}", &create_string_for_inetsocketaddress(&address));
     let mut incoming = server.incoming();
     // A real AVR only allows one connection at a time. If a second connection request arrives,
-    // the old connection is closed in favour of the new one. This cannot be implemented easily
-    // just now because it is not possible to clone gio_futures::SocketConnection.
+    // the old connection is closed in favour of the new one. It is not possible to clone a
+    // gio_futures::SocketConnection or the read and write halves, so they cannot be remembered
+    // outside the loop. Must therefore use channels to get the previous connection to close
+    // when a second is received.
+    let mut handler_closer_send: Option<futures::channel::oneshot::Sender<()>> = None;
+    let mut handler_response_receive: Option<futures::channel::oneshot::Receiver<()>> = None;
     while let Some(socket_connection) = incoming.next().await {
         match socket_connection {
             Ok(s_c) => {
+                // If there is a previous connection then ask it to terminate itself.
+                if handler_closer_send.is_some() {
+                    handler_closer_send.unwrap().send(()).unwrap();
+                }
+                // And wait until it has done so.
+                if handler_response_receive.is_some() {
+                    handler_response_receive.unwrap().await.unwrap();
+                }
+                // Set up the channels for the new connection.
+                let (closer_send, closer_receive) = futures::channel::oneshot::channel::<()>();
+                let (response_send, response_receive) = futures::channel::oneshot::channel::<()>();
+                // Remember the appropriate ends for the next time around the loop.
+                handler_closer_send = Some(closer_send);
+                handler_response_receive = Some(response_receive);
                 let local_address = match s_c.get_local_address() {
                     Ok(s_a) => create_string_for_socketaddress(&s_a),
                     Err(_) => "error".to_string(),
@@ -432,8 +469,8 @@ async fn run_connection_listener(port_number: u16) {
                     Ok(s_a) => create_string_for_socketaddress(&s_a),
                     Err(_) => "error".to_string(),
                 };
-                debug!("run_connection_listener: got a connection on {} from {}", local_address, remote_address);
-                glib::MainContext::default().spawn_local(process_connection(s_c));
+                debug!("run_connection_listener: got a connection on {} from {}", &local_address, &remote_address);
+                glib::MainContext::default().spawn_local(process_connection(s_c, closer_receive, response_send));
             },
             Err(e) => debug!("run_connection_listener: got an errorful connection request – {}", e),
         }
