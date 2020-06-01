@@ -284,7 +284,7 @@ lazy_static! {
         d.insert(RC5Command::Nine, (0x10, 0x09));
         d.insert(RC5Command::AccessLipsyncDelayControl, (0x10, 0x32));
         d.insert(RC5Command::Zero, (0x10, 0x00));
-        d.insert(RC5Command::CycleBetweenVFDInformationPanels, (0x10, 0x37));
+        d.insert(RC5Command::CycleBetweenVFDInformationPanels, (0x10, 0x37));  // Repeat use of value by Blue.
         d.insert(RC5Command::Rewind, (0x10, 0x79));
         d.insert(RC5Command::FastForward, (0x10, 0x34));
         d.insert(RC5Command::SkipBack, (0x10, 0x21));
@@ -302,7 +302,7 @@ lazy_static! {
         d.insert(RC5Command::Audio_RoomEQOnOff, (0x10, 0x1e));
         d.insert(RC5Command::NavigateDown, (0x10, 0x55));
         d.insert(RC5Command::RTN_AccessSubwooferTrimControl, (0x10, 0x33));
-        d.insert(RC5Command::HOME, (0x10, 0x2b));
+        d.insert(RC5Command::HOME, (0x10, 0x2b)); // Repeat use of value by Yellow.
         d.insert(RC5Command::Mute, (0x10, 0x0d));
         d.insert(RC5Command::IncreaseVolume, (0x10, 0x10));
         d.insert(RC5Command::MODE_CycleBetweenDecodingModes, (0x10, 0x20));
@@ -311,8 +311,8 @@ lazy_static! {
         d.insert(RC5Command::DecreaseVolume, (0x10, 0x11));
         d.insert(RC5Command::Red, (0x10, 0x29));
         d.insert(RC5Command::Green, (0x10, 0x2a));
-        d.insert(RC5Command::Yellow, (0x10, 0x2b)); // Repeat use of value according to the document.
-        d.insert(RC5Command::Blue, (0x10, 0x37)); // Repeat use of value according to the document.
+        d.insert(RC5Command::Yellow, (0x10, 0x2b)); // Repeat use of value by HOME.
+        d.insert(RC5Command::Blue, (0x10, 0x37)); // Repeat use of value by CycleBetweenVFDInformationPanels.
         d.insert(RC5Command::Radio, (0x10, 0x5b));
         d.insert(RC5Command::Aux, (0x10, 0x63));
         d.insert(RC5Command::Net, (0x10, 0x5c));
@@ -407,7 +407,7 @@ impl From<(u8, u8)> for RC5Command {
             (0x10, 0x09) => RC5Command::Nine,
             (0x10, 0x32) => RC5Command::AccessLipsyncDelayControl,
             (0x10, 0x00) => RC5Command::Zero,
-            (0x10, 0x37) => RC5Command::CycleBetweenVFDInformationPanels,
+            (0x10, 0x37) => RC5Command::CycleBetweenVFDInformationPanels, // Repeat use of value by Blue.
             (0x10, 0x79) => RC5Command::Rewind,
             (0x10, 0x34) => RC5Command::FastForward,
             (0x10, 0x21) => RC5Command::SkipBack,
@@ -425,7 +425,7 @@ impl From<(u8, u8)> for RC5Command {
             (0x10, 0x1e) => RC5Command::Audio_RoomEQOnOff,
             (0x10, 0x55) => RC5Command::NavigateDown,
             (0x10, 0x33) => RC5Command::RTN_AccessSubwooferTrimControl,
-            (0x10, 0x2b) => RC5Command::HOME,
+            (0x10, 0x2b) => RC5Command::HOME,  // Repeat use of value by Yellow.
             (0x10, 0x0d) => RC5Command::Mute,
             (0x10, 0x10) => RC5Command::IncreaseVolume,
             (0x10, 0x20) => RC5Command::MODE_CycleBetweenDecodingModes,
@@ -434,8 +434,8 @@ impl From<(u8, u8)> for RC5Command {
             (0x10, 0x11) => RC5Command::DecreaseVolume,
             (0x10, 0x29) => RC5Command::Red,
             (0x10, 0x2a) => RC5Command::Green,
-            (0x10, 0x2b) => RC5Command::Yellow, // Repeat use of value according to the document.
-            (0x10, 0x37) => RC5Command::Blue, // Repeat use of value according to the document.
+            (0x10, 0x2b) => RC5Command::Yellow, // Repeat use of value by HOME.
+            (0x10, 0x37) => RC5Command::Blue, // Repeat use of value by CycleBetweenVFDInformationPanels.
             (0x10, 0x5b) => RC5Command::Radio,
             (0x10, 0x63) => RC5Command::Aux,
             (0x10, 0x5c) => RC5Command::Net,
