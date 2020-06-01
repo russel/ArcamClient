@@ -17,16 +17,28 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-//! A program to simulate (aka mock) a AVR850 so that integration tests of ArcamClient can be
-//! undertaken.
+//! A program to simulate (aka mock) an AVR850 so that integration tests of the ArcamClient can
+//! be undertaken.
 //!
-//! The process opens a port on localhost, by default 50000, and listens for connections.  A
-//! real AVR850 accepts only a single connection at a time. If a new connection arrives it
-//! closes the prior connection. This behaviour is not yet replicated by this mock.
+//! The process opens a port on localhost, by default 50000, and listens for connections.
 //!
-//! TCP packets received must either be AMX requests or requests that use the Arcam packet
-//! protocol. Replies to queries are sent within three seconds of the request being received. NB
-//! This is an asynchronous question/answer system not a synchronous one.
+//! A real AVR850 accepts only a single connection at a time: if a new connection arrives it
+//! closes the prior connection. This behaviour is not replicated by this mock. Instead many
+//! connections are allowed but each connection has its own distinct amplifier state.  In effect
+//! this process is a server of mock AVR850 processes.
+//!
+//! A real AVR850 only listens on port 50000.  This simulation/mock can be started listening on
+//! any port in the range [50001, 65535]. If all processes started by the integration tests used
+//! the same port then there is the possibility that a process is started whilst another is
+//! running or the port was not yet ready for reuse. In both cases the later process would fail
+//! to start, and so the integration test would fail due to lack of connection to a mock
+//! AVR850. Testing must avoid "Unable to bind socket: Address already in use".
+//!
+//! TCP packets received by a (mock) AVR850 must either be AMX requests or requests that use the
+//! Arcam packet protocol. Replies to queries are sent within three seconds of the request being
+//! received. NB This is an asynchronous question/answer system not a synchronous
+//! one. Experimentation indicates that a real AVR850 responds to anything other than an Arcam
+//! packet with an AMX response. This behaviour is replicated by this simulation/mock.
 //!
 //! When on a DAB radio such as Smooth, an AVR850 sends out Command::DLSPDTInformation response
 //! packets on a regular basis without any prior request. So packets such as:
@@ -65,13 +77,10 @@
 //! 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
 //! 32, 32, 13]
 
-// Required for the select macro. The value is that reported by rustc as the required one.
-
-#![recursion_limit="512"]
-
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::env::args;
+use std::rc::Rc;
 use std::sync::Mutex;
 use std::time::SystemTime;
 
@@ -85,8 +94,6 @@ use gio_futures::{SocketConnection, SocketListener};
 use futures;
 use futures::prelude::*;
 
-use lazy_static::lazy_static;
-
 use num_traits::FromPrimitive;
 
 use arcamclient::arcam_protocol::{
@@ -94,16 +101,16 @@ use arcamclient::arcam_protocol::{
     PACKET_START, REQUEST_QUERY,
 };
 
-/// Zone state for an AVR. An AVR comprises a number of zones.
+/// State for an AVR zone.
 #[derive(Debug)]
 struct ZoneState {
-    power: Cell<PowerState>, // TODO Must Zone 1 be on for the Ethernet to work?
-    volume: Cell<u8>, // Must be in range 0..100
+    power: Cell<PowerState>,
+    volume: Cell<u8>, // Must be in range [0..100)
     mute: Cell<MuteState>,
     source: Cell<Source>,
 }
 
-/// The state of a mock AVR.
+/// The state of a mock AVR.  An AVR850 comprises two zones, an AVR600 comprised 3 zones.
 #[derive(Debug)]
 struct AmpState {
     zones: HashMap<ZoneNumber, ZoneState>,
@@ -119,7 +126,7 @@ impl Default for AmpState {
         amp_state.zones.insert(
             ZoneNumber::One,
             ZoneState{
-                power: Cell::new(PowerState::On), // TODO Must Zone 1 be on for the Ethernet connection to work?
+                power: Cell::new(PowerState::On),
                 volume: Cell::new(30),
                 mute: Cell::new(MuteState::NotMuted),
                 source: Cell::new(Source::CD),
@@ -136,12 +143,9 @@ impl Default for AmpState {
     }
 }
 
-lazy_static! {
-    static ref AMP_STATE: Mutex<AmpState> = Mutex::new(AmpState::default());
-}
-
 /// Return a response to a given request updating the state of the mock amp as needed.
-fn create_command_response(request: &Request, amp_state: &mut AmpState, sender: Option<futures::channel::mpsc::Sender<Vec<u8>>>) -> Result<Response, String>{
+fn create_command_response(request: &Request, amp_state_ptr: Rc<RefCell<AmpState>>, sender: Option<futures::channel::mpsc::Sender<Vec<u8>>>) -> Result<Response, String>{
+    let mut amp_state = amp_state_ptr.borrow_mut();
     match request.cc {
         Command::Power => {
             assert_eq!(request.data.len(), 1);
@@ -234,7 +238,8 @@ fn create_command_response(request: &Request, amp_state: &mut AmpState, sender: 
                 RC5Command::Radio => {
                     amp_state.zones[&request.zone].source.set(Source::TUNER);
                     if sender.is_some() {
-                        glib::MainContext::default().spawn_local(send_tuner_data_and_start_dls_pdt_sending(request.zone, sender.unwrap().clone()));
+                        glib::MainContext::default().spawn_local(
+                            send_tuner_data_and_start_dls_pdt_sending(amp_state_ptr.clone(), request.zone, sender.unwrap().clone()));
                     }
                 },
                 RC5Command::CD => amp_state.zones[&request.zone].source.set(Source::CD),
@@ -288,7 +293,7 @@ fn create_command_response(request: &Request, amp_state: &mut AmpState, sender: 
 /// When an AVR850 is using an FM or DAB tuner (aka radio) source, it sends out extra DLS/PDT
 /// packets. These normally provide information about the show currently on the station and the
 /// piece currently being played. Simulate this without even trying to be too realistic.
-async fn send_tuner_data_and_start_dls_pdt_sending(zone: ZoneNumber, mut sender: futures::channel::mpsc::Sender<Vec<u8>>) {
+async fn send_tuner_data_and_start_dls_pdt_sending(amp_state_ptr: Rc<RefCell<AmpState>>, zone: ZoneNumber, mut sender: futures::channel::mpsc::Sender<Vec<u8>>) {
     // TODO What about FM as well as DAB?
     // Station name is always 16 bytes long.
     let station_name = "A DAB Station   ";
@@ -303,13 +308,13 @@ async fn send_tuner_data_and_start_dls_pdt_sending(zone: ZoneNumber, mut sender:
     glib::timeout_add_seconds_local(4, {
         let mut s = sender.clone();
         move || {
-            let zone_source = AMP_STATE.lock().unwrap().zones[&zone].source.get();
+            let zone_source = amp_state_ptr.borrow().zones[&zone].source.get(); //  AMP_STATE.lock().unwrap().zones[&zone].source.get();
             if zone_source == Source::TUNER || zone_source == Source::TUNERDAB {
                 // DLS/PDT data is always 128 bytes long according to the manual, but experiment
                 // indicates a real AVR850 returns 129 characters.The manual states that the
                 // string is padded with spaces to fill the 128 characters. A real AVR850 seems
-                // to null terminate the string, with two nulls and then pad the 129 characters
-                // with space.
+                // to null terminate the string, with two nulls if possible, and then pad the
+                // 129 characters with spaces.
                 let mut dls_pdt_buffer = [' ' as u8; 129];
                 // Quite weird that elapsed doesn't return zero!
                 let dsl_pdt_data = format!("This DLS/PDT information sent after {:?}", SystemTime::now().elapsed().unwrap());
@@ -321,7 +326,7 @@ async fn send_tuner_data_and_start_dls_pdt_sending(zone: ZoneNumber, mut sender:
                 }
                 assert_eq!(i, dsl_pdt_data.len());
                 dls_pdt_buffer[i] = 0;
-                // AVR850 appears to put two null bytes in the buffer if it can.
+                // An AVR850 appears to put two null bytes in the buffer if it can.
                 if dsl_pdt_data.len() < 128 {
                     i += 1;
                     dls_pdt_buffer[i] = 0;
@@ -337,28 +342,28 @@ async fn send_tuner_data_and_start_dls_pdt_sending(zone: ZoneNumber, mut sender:
     });
 }
 
-// Make it easier to display the InetSocketAddress in a human readable form for debugging.
+// Make it easier to display a InetSocketAddress in a human readable form for debugging.
 fn create_string_for_inetsocketaddress(address: &gio::InetSocketAddress) -> String {
     format!("{}:{}", gio::InetAddressExt::to_string(&address.get_address().unwrap()), address.get_port())
 }
 
-// Make it easier to display the SocketAddress in a human readable form for debugging.
+// Make it easier to display a SocketAddress in a human readable form for debugging.
 fn create_string_for_socketaddress(address: &gio::SocketAddress) -> String {
     create_string_for_inetsocketaddress(&address.clone().downcast::<gio::InetSocketAddress>().unwrap())
 }
 
 /// Handle a connection from a remote client.
 ///
-/// Read Request byte sequences as they arrive, parse them to create Requests and then send a
-/// Response as a real AVR850 might.
-async fn process_connection(
-    connection: SocketConnection,
-    stop_receiver: futures::channel::oneshot::Receiver<()>,
-    response_sender: futures::channel::oneshot::Sender<()>) {
+/// Read [Request](struct.Request.html) byte sequences as they arrive, parse them to create
+/// [Request](struct.Request.html)s and then send a [Response](struct.Response.html) as a real
+/// AVR850 might.
+///
+/// Each connection has its own [AmpState](struct.AmpState.html) so appears as a distinct mock AVR850.
+async fn process_connection(connection: SocketConnection, amp_state_ptr: Rc<RefCell<AmpState>>) {
     let remote_address = connection.get_remote_address().unwrap();
     debug!("process_connection: connection from {}", &create_string_for_socketaddress(&remote_address));
     let (mut reader, mut writer) = connection.split();
-    let(mut tx_send_queue, mut rx_send_queue) = futures::channel::mpsc::channel::<Vec<u8>>(10);
+    let (mut tx_send_queue, mut rx_send_queue) = futures::channel::mpsc::channel::<Vec<u8>>(10);
     glib::MainContext::default().spawn_local(async move {
         while let Some(data) = rx_send_queue.next().await {
             match writer.write_all(&data).await {
@@ -367,59 +372,48 @@ async fn process_connection(
             }
         }
     });
-    let mut stop_receiver_fused = stop_receiver.fuse();
     loop {
         let mut buffer = [0u8; 1024];  // Must be bigger than the byte size of the maximum number of simultaneous packets receivable.
-        futures::select! {
-            _ = stop_receiver_fused => {
-                response_sender.send(()).unwrap();
-                break;
-            }
-            read_result = reader.read(&mut buffer).fuse() => {
-                match read_result {
-                    Ok(read_count) => {
-                        if read_count == 0 {
-                            debug!("process_connection: zero length read, assuming connection from {} closed.", &create_string_for_socketaddress(&remote_address));
-                            break;
-                        } else {
-                            let mut data = &buffer[..read_count];
-                            if data[0] == PACKET_START {
-                                // Process an Arcam packet. There may be more than one packet in this TCP message.
-                                // TODO What happens if there is an AMX\r within the TCP message?
-                                while data.len() > 0 {
-                                    match Request::parse_bytes(data) {
-                                        Ok((request, count)) => {
-                                            data = &data[count..];
-                                            match create_command_response(&request, &mut AMP_STATE.lock().unwrap(), Some(tx_send_queue.clone())) {
-                                                Ok(response) => {
-                                                    debug!("process_connection: sending the response {:?}", &response);
-                                                    match tx_send_queue.try_send(response.to_bytes()) {
-                                                        Ok(_) => debug!("process_connection: put response on the queue."),
-                                                        Err(e) => debug!("process_connection: failed to put response on the queue – {}", e),
-                                                    };
-                                                },
-                                                Err(e) => debug!("process_connection: failed to process a request – {}", e),
+        match reader.read(&mut buffer).await {
+            Ok(read_count) => {
+                if read_count == 0 {
+                    debug!("process_connection: zero length read, assuming connection from {} closed.", &create_string_for_socketaddress(&remote_address));
+                    break;
+                } else {
+                    let mut data = &buffer[..read_count];
+                    if data[0] == PACKET_START {
+                        // Process an Arcam packet. There may be more than one packet in this TCP message.
+                        // TODO What happens if there is an AMX\r within the TCP message?
+                        while data.len() > 0 {
+                            match Request::parse_bytes(data) {
+                                Ok((request, count)) => {
+                                    data = &data[count..];
+                                    match create_command_response(&request, amp_state_ptr.clone(), Some(tx_send_queue.clone())) {
+                                        Ok(response) => {
+                                            debug!("process_connection: sending the response {:?}", &response);
+                                            match tx_send_queue.try_send(response.to_bytes()) {
+                                                Ok(_) => debug!("process_connection: put response on the queue."),
+                                                Err(e) => debug!("process_connection: failed to put response on the queue – {}", e),
                                             };
                                         },
-                                        Err(e) => debug!("process_connection: failed to parse {:?} as a request – {}", &data, e),
+                                        Err(e) => debug!("process_connection: failed to process a request – {}", e),
                                     };
-                                }
-                            } else {
-                                debug!("process_connection: received a non-packet message – {:?}", &data);
-                                // Experimentation with a real AVR850 indicates that it responds with
-                                // an AMXB response to any and all messages that are not Arcam packets.
-                                let amx_response = "AMXB<Device-SDKClass=Receiver><Device-Make=ARCAM><Device-Model=AVR850><Device-Revision=2.0.0>\r";
-                                match tx_send_queue.try_send(amx_response.as_bytes().to_vec()) {
-                                    Ok(_) => debug!("process_connection: put AMX response on the queue."),
-                                    Err(e) => debug!("process_connection: failed to put AMX response on the queue – {}", e),
-                                }
-                            }
+                                },
+                                Err(e) => debug!("process_connection: failed to parse {:?} as a request – {}", &data, e),
+                            };
                         }
-                    },
-                    Err(e) => debug!("process_connection: read failed – {}", e),
-                };
-            }
-        }
+                    } else {
+                        debug!("process_connection: received a non-packet message – {:?}", &data);
+                        match tx_send_queue.try_send(
+                            "AMXB<Device-SDKClass=Receiver><Device-Make=ARCAM><Device-Model=AVR850><Device-Revision=2.0.0>\r".as_bytes().to_vec()) {
+                            Ok(_) => debug!("process_connection: put AMX response on the queue."),
+                            Err(e) => debug!("process_connection: failed to put AMX response on the queue – {}", e),
+                        }
+                    }
+                }
+            },
+            Err(e) => debug!("process_connection: read failed – {}", e),
+        };
     }
     debug!("process_connection: terminating connection with {:?}", &create_string_for_socketaddress(&remote_address));
 }
@@ -430,37 +424,18 @@ async fn process_connection(
 /// support integration testing – tests may have to run faster than ports become available after
 /// being closed, so reusing the same port is not feasible.
 ///
-/// As with a real AVR850 this mock drops connections when a new connection request arrives.
+/// A real AVR850 only allows a single connection at a time, dropping the prior connection in
+/// favour of the new connection request. This is not modelled in this mock. Instead each
+/// connection looks like a connection to a different mock AVR850.
 async fn run_connection_listener(port_number: u16) {
     let server = SocketListener::new();
     let address = gio::InetSocketAddress::new(&gio::InetAddress::new_from_string("127.0.0.1"), port_number);
     server.add_address(&address, gio::SocketType::Stream, gio::SocketProtocol::Tcp, None::<&glib::Object>).expect("Failed to bind to address.");
     debug!("run_connection_listener: Listening on {}", &create_string_for_inetsocketaddress(&address));
     let mut incoming = server.incoming();
-    // A real AVR only allows one connection at a time. If a second connection request arrives,
-    // the old connection is closed in favour of the new one. It is not possible to clone a
-    // gio_futures::SocketConnection or the read and write halves, so they cannot be remembered
-    // outside the loop. Must therefore use channels to get the previous connection to close
-    // when a second is received.
-    let mut handler_closer_send: Option<futures::channel::oneshot::Sender<()>> = None;
-    let mut handler_response_receive: Option<futures::channel::oneshot::Receiver<()>> = None;
     while let Some(socket_connection) = incoming.next().await {
         match socket_connection {
             Ok(s_c) => {
-                // If there is a previous connection then ask it to terminate itself.
-                if handler_closer_send.is_some() {
-                    handler_closer_send.unwrap().send(()).unwrap();
-                }
-                // And wait until it has done so.
-                if handler_response_receive.is_some() {
-                    handler_response_receive.unwrap().await.unwrap();
-                }
-                // Set up the channels for the new connection.
-                let (closer_send, closer_receive) = futures::channel::oneshot::channel::<()>();
-                let (response_send, response_receive) = futures::channel::oneshot::channel::<()>();
-                // Remember the appropriate ends for the next time around the loop.
-                handler_closer_send = Some(closer_send);
-                handler_response_receive = Some(response_receive);
                 let local_address = match s_c.get_local_address() {
                     Ok(s_a) => create_string_for_socketaddress(&s_a),
                     Err(_) => "error".to_string(),
@@ -470,7 +445,7 @@ async fn run_connection_listener(port_number: u16) {
                     Err(_) => "error".to_string(),
                 };
                 debug!("run_connection_listener: got a connection on {} from {}", &local_address, &remote_address);
-                glib::MainContext::default().spawn_local(process_connection(s_c, closer_receive, response_send));
+                glib::MainContext::default().spawn_local(process_connection(s_c, Rc::new(RefCell::new(AmpState::default()))));
             },
             Err(e) => debug!("run_connection_listener: got an errorful connection request – {}", e),
         }
@@ -485,6 +460,10 @@ async fn run_connection_listener(port_number: u16) {
 /// order to support integration testing where using a single port number can lead to problems
 /// as a socket may not be available for use after being closed as fast as new mocks are
 /// created. Testing must avoid "Unable to bind socket: Address already in use".
+///
+/// A real AVR850 only allows a single connection at a time, dropping the prior connection in
+/// favour of the new connection request. This is not modelled in this mock. Instead each
+/// connection looks like a connection to a different mock AVR850.
 fn main() {
     env_logger::init();
     let args: Vec<String> = args().collect();
@@ -502,6 +481,9 @@ fn main() {
 #[cfg(test)]
 mod tests {
 
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
     use super::{AmpState, create_command_response};
 
     use arcamclient::arcam_protocol::{
@@ -512,52 +494,52 @@ mod tests {
 
     #[test]
     fn get_display_brightness() {
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.brightness.get(), Brightness::Level2);
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().brightness.get(), Brightness::Level2);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_QUERY]).unwrap(), &mut amp_state, None).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![REQUEST_QUERY]).unwrap(), amp_state_ptr.clone(), None).unwrap(),
             Response::new(ZoneNumber::One, Command::DisplayBrightness, AnswerCode::StatusUpdate, vec![Brightness::Level2 as u8]).unwrap());
-        assert_eq!(amp_state.brightness.get(), Brightness::Level2);
+        assert_eq!(amp_state_ptr.borrow().brightness.get(), Brightness::Level2);
     }
 
     #[test]
     fn set_display_brightness_error() {
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.brightness.get(), Brightness::Level2);
-        match create_command_response(&Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![Brightness::Level2 as u8]).unwrap(), &mut amp_state, None) {
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().brightness.get(), Brightness::Level2);
+        match create_command_response(&Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![Brightness::Level2 as u8]).unwrap(), amp_state_ptr.clone(), None) {
             Ok(_) => assert!(false),
             Err(e) => assert_eq!(e, "Incorrect DisplayBrightness command 2."),
         }
-        assert_eq!(amp_state.brightness.get(), Brightness::Level2);
+        assert_eq!(amp_state_ptr.borrow().brightness.get(), Brightness::Level2);
     }
 
     #[test]
     fn set_display_brightness_using_rc5() {
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.brightness.get(), Brightness::Level2);
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().brightness.get(), Brightness::Level2);
         let rc5_data = get_rc5command_data(RC5Command::DisplayL1);
         let data = vec![rc5_data.0, rc5_data.1];
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::SimulateRC5IRCommand, data.clone()).unwrap(), &mut amp_state, None).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::One, Command::SimulateRC5IRCommand, data.clone()).unwrap(), amp_state_ptr.clone(), None).unwrap(),
             Response::new(ZoneNumber::One, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, data).unwrap());
-        assert_eq!(amp_state.brightness.get(), Brightness::Level1);
+        assert_eq!(amp_state_ptr.borrow().brightness.get(), Brightness::Level1);
     }
 
     #[test]
     fn get_zone_1_power() {
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::One].power.get(), PowerState::On);
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::One].power.get(), PowerState::On);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::Power, vec![REQUEST_QUERY]).unwrap(), &mut amp_state, None).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::One, Command::Power, vec![REQUEST_QUERY]).unwrap(), amp_state_ptr.clone(), None).unwrap(),
             Response::new(ZoneNumber::One, Command::Power, AnswerCode::StatusUpdate, vec![PowerState::On as u8]).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::One].power.get(), PowerState::On);
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::One].power.get(), PowerState::On);
     }
 
     #[test]
     fn set_zone_1_power_error() {
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::One].power.get(), PowerState::On);
-        match create_command_response(&Request::new(ZoneNumber::One, Command::Power, vec![0x0]).unwrap(), &mut amp_state, None) {
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::One].power.get(), PowerState::On);
+        match create_command_response(&Request::new(ZoneNumber::One, Command::Power, vec![0x0]).unwrap(), amp_state_ptr.clone(), None) {
             Ok(_) => assert!(false),
             Err(e) => assert_eq!(e, "Incorrect Power command 0."),
         }
@@ -565,53 +547,53 @@ mod tests {
 
     #[test]
     fn set_zone_1_power_using_rc5() {
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::One].power.get(), PowerState::On);
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::One].power.get(), PowerState::On);
         let rc5_data = get_rc5command_data(RC5Command::PowerOff);
         let data = vec![rc5_data.0, rc5_data.1];
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::SimulateRC5IRCommand, data.clone()).unwrap(), &mut amp_state, None).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::One, Command::SimulateRC5IRCommand, data.clone()).unwrap(), amp_state_ptr.clone(), None).unwrap(),
             Response::new(ZoneNumber::One, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, data).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::One].power.get(), PowerState::Standby);
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::One].power.get(), PowerState::Standby);
     }
 
     #[test]
     fn get_zone_1_volume() {
         let volume = 30u8;
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::One].volume.get(), volume);
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::One].volume.get(), volume);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![REQUEST_QUERY]).unwrap(), &mut amp_state, None).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![REQUEST_QUERY]).unwrap(), amp_state_ptr.clone(), None).unwrap(),
             Response::new(ZoneNumber::One, Command::SetRequestVolume, AnswerCode::StatusUpdate, vec![volume]).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::One].volume.get(), volume);
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::One].volume.get(), volume);
     }
 
     #[test]
     fn set_zone_1_volume() {
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::One].volume.get(), 30);
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::One].volume.get(), 30);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![0x0f]).unwrap(), &mut amp_state, None).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![0x0f]).unwrap(), amp_state_ptr.clone(), None).unwrap(),
             Response::new(ZoneNumber::One, Command::SetRequestVolume, AnswerCode::StatusUpdate, vec![0x0f]).unwrap()
         );
-        assert_eq!(amp_state.zones[&ZoneNumber::One].volume.get(), 15);
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::One].volume.get(), 15);
     }
 
     #[test]
     fn get_zone_1_mute() {
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::One].mute.get(), MuteState::NotMuted);
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::One].mute.get(), MuteState::NotMuted);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::RequestMuteStatus, vec![REQUEST_QUERY]).unwrap(), &mut amp_state, None).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::One, Command::RequestMuteStatus, vec![REQUEST_QUERY]).unwrap(), amp_state_ptr.clone(), None).unwrap(),
             Response::new(ZoneNumber::One, Command::RequestMuteStatus, AnswerCode::StatusUpdate, vec![MuteState::NotMuted as u8]).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::One].mute.get(), MuteState::NotMuted);
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::One].mute.get(), MuteState::NotMuted);
     }
 
     #[test]
     fn set_zone_1_mute_error() {
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::One].mute.get(), MuteState::NotMuted);
-        match create_command_response(&Request::new(ZoneNumber::One, Command::RequestMuteStatus, vec![0x0]).unwrap(), &mut amp_state, None) {
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::One].mute.get(), MuteState::NotMuted);
+        match create_command_response(&Request::new(ZoneNumber::One, Command::RequestMuteStatus, vec![0x0]).unwrap(), amp_state_ptr.clone(), None) {
             Ok(_) => assert!(false),
             Err(e) => assert_eq!(e, "Incorrect RequestMuteStatus command 0."),
         }
@@ -619,31 +601,31 @@ mod tests {
 
     #[test]
     fn set_zone_1_mute_using_rc5() {
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::One].mute.get(), MuteState::NotMuted);
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::One].mute.get(), MuteState::NotMuted);
         let rc5_data = get_rc5command_data(RC5Command::MuteOn);
         let data = vec![rc5_data.0, rc5_data.1];
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::SimulateRC5IRCommand, data.clone()).unwrap(), &mut amp_state, None).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::One, Command::SimulateRC5IRCommand, data.clone()).unwrap(), amp_state_ptr.clone(), None).unwrap(),
             Response::new(ZoneNumber::One, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, data).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::One].mute.get(), MuteState::Muted);
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::One].mute.get(), MuteState::Muted);
     }
 
     #[test]
     fn get_zone_1_source() {
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::One].source.get(), Source::CD);
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::One].source.get(), Source::CD);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap(), &mut amp_state, None).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap(), amp_state_ptr.clone(), None).unwrap(),
             Response::new(ZoneNumber::One, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::CD as u8]).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::One].source.get(), Source::CD);
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::One].source.get(), Source::CD);
     }
 
     #[test]
     fn set_zone_1_source_error() {
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::One].source.get(), Source::CD);
-        match create_command_response(&Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![Source::TUNER as u8]).unwrap(), &mut amp_state, None) {
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::One].source.get(), Source::CD);
+        match create_command_response(&Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![Source::TUNER as u8]).unwrap(), amp_state_ptr.clone(), None) {
             Ok(_) => assert!(false),
             Err(e) => assert_eq!(e, "Incorrect RequestCurrentSource command 11."),
         }
@@ -651,32 +633,32 @@ mod tests {
 
     #[test]
     fn set_zone_1_source_using_rc5() {
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::One].source.get(), Source::CD);
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::One].source.get(), Source::CD);
         let rc5_data = get_rc5command_data(RC5Command::BD);
         let data = vec![rc5_data.0, rc5_data.1];
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::One, Command::SimulateRC5IRCommand, data.clone()).unwrap(), &mut amp_state, None).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::One, Command::SimulateRC5IRCommand, data.clone()).unwrap(), amp_state_ptr.clone(), None).unwrap(),
             Response::new(ZoneNumber::One, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, data).unwrap()
         );
-        assert_eq!(amp_state.zones[&ZoneNumber::One].source.get(), Source::BD);
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::One].source.get(), Source::BD);
     }
 
     #[test]
     fn get_zone_2_power() {
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].power.get(), PowerState::Standby);
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::Two].power.get(), PowerState::Standby);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::Two, Command::Power, vec![REQUEST_QUERY]).unwrap(), &mut amp_state, None).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::Two, Command::Power, vec![REQUEST_QUERY]).unwrap(), amp_state_ptr.clone(), None).unwrap(),
             Response::new(ZoneNumber::Two, Command::Power, AnswerCode::StatusUpdate, vec![PowerState::Standby as u8]).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].power.get(), PowerState::Standby);
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::Two].power.get(), PowerState::Standby);
     }
 
     #[test]
     fn set_zone_2_power_error() {
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].power.get(), PowerState::Standby);
-        match create_command_response(&Request::new(ZoneNumber::Two, Command::Power, vec![0x0]).unwrap(), &mut amp_state, None) {
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::Two].power.get(), PowerState::Standby);
+        match create_command_response(&Request::new(ZoneNumber::Two, Command::Power, vec![0x0]).unwrap(), amp_state_ptr.clone(), None) {
             Ok(_) => assert!(false),
             Err(e) => assert_eq!(e, "Incorrect Power command 0."),
         }
@@ -684,53 +666,53 @@ mod tests {
 
     #[test]
     fn set_zone_2_power_using_rc5() {
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].power.get(), PowerState::Standby);
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::Two].power.get(), PowerState::Standby);
         let rc5_data = get_rc5command_data(RC5Command::Zone2PowerOn);
         let data = vec![rc5_data.0, rc5_data.1];
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, data.clone()).unwrap(), &mut amp_state, None).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, data.clone()).unwrap(), amp_state_ptr.clone(), None).unwrap(),
             Response::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, data).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].power.get(), PowerState::On);
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::Two].power.get(), PowerState::On);
     }
 
     #[test]
     fn get_zone_2_volume() {
         let volume = 20u8;
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].volume.get(), volume);
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::Two].volume.get(), volume);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::Two, Command::SetRequestVolume, vec![REQUEST_QUERY]).unwrap(), &mut amp_state, None).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::Two, Command::SetRequestVolume, vec![REQUEST_QUERY]).unwrap(), amp_state_ptr.clone(), None).unwrap(),
             Response::new(ZoneNumber::Two, Command::SetRequestVolume, AnswerCode::StatusUpdate, vec![volume]).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].volume.get(), volume);
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::Two].volume.get(), volume);
     }
 
     #[test]
     fn set_zone_2_volume() {
         let volume = 15u8;
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].volume.get(), 20);
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::Two].volume.get(), 20);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::Two, Command::SetRequestVolume, vec![volume]).unwrap(), &mut amp_state, None).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::Two, Command::SetRequestVolume, vec![volume]).unwrap(), amp_state_ptr.clone(), None).unwrap(),
             Response::new(ZoneNumber::Two, Command::SetRequestVolume, AnswerCode::StatusUpdate, vec![volume]).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].volume.get(), volume);
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::Two].volume.get(), volume);
     }
 
     #[test]
     fn get_zone_2_mute() {
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].mute.get(), MuteState::NotMuted);
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::Two].mute.get(), MuteState::NotMuted);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::Two, Command::RequestMuteStatus, vec![REQUEST_QUERY]).unwrap(), &mut amp_state, None).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::Two, Command::RequestMuteStatus, vec![REQUEST_QUERY]).unwrap(), amp_state_ptr.clone(), None).unwrap(),
             Response::new(ZoneNumber::Two, Command::RequestMuteStatus, AnswerCode::StatusUpdate, vec![MuteState::NotMuted as u8]).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].mute.get(), MuteState::NotMuted);
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::Two].mute.get(), MuteState::NotMuted);
     }
 
     #[test]
     fn set_zone_2_mute_error() {
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].mute.get(), MuteState::NotMuted);
-        match create_command_response(&Request::new(ZoneNumber::Two, Command::RequestMuteStatus, vec![0x1]).unwrap(), &mut amp_state, None) {
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::Two].mute.get(), MuteState::NotMuted);
+        match create_command_response(&Request::new(ZoneNumber::Two, Command::RequestMuteStatus, vec![0x1]).unwrap(), amp_state_ptr.clone(), None) {
             Ok(_) => assert!(false),
             Err(e) => assert_eq!(e, "Incorrect RequestMuteStatus command 1."),
         }
@@ -738,31 +720,31 @@ mod tests {
 
     #[test]
     fn set_zone_2_mute_using_rc5() {
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].mute.get(), MuteState::NotMuted);
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::Two].mute.get(), MuteState::NotMuted);
         let rc5_data = get_rc5command_data(RC5Command::Zone2MuteOn);
         let data =vec! [rc5_data.0, rc5_data.1];
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, data.clone()).unwrap(), &mut amp_state, None).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, data.clone()).unwrap(), amp_state_ptr.clone(), None).unwrap(),
             Response::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, data).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].mute.get(), MuteState::Muted);
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::Two].mute.get(), MuteState::Muted);
     }
 
     #[test]
     fn get_zone_2_source() {
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].source.get(), Source::FollowZone1);
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::Two].source.get(), Source::FollowZone1);
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::Two, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap(), &mut amp_state, None).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::Two, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap(), amp_state_ptr.clone(), None).unwrap(),
             Response::new(ZoneNumber::Two, Command::RequestCurrentSource, AnswerCode::StatusUpdate, vec![Source::FollowZone1 as u8]).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].source.get(), Source::FollowZone1);
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::Two].source.get(), Source::FollowZone1);
     }
 
     #[test]
     fn set_zone_2_source_error() {
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].source.get(), Source::FollowZone1);
-        match create_command_response(&Request::new(ZoneNumber::Two, Command::RequestCurrentSource, vec![Source::TUNER as u8]).unwrap(), &mut amp_state, None) {
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::Two].source.get(), Source::FollowZone1);
+        match create_command_response(&Request::new(ZoneNumber::Two, Command::RequestCurrentSource, vec![Source::TUNER as u8]).unwrap(), amp_state_ptr.clone(), None) {
             Ok(_) => assert!(false),
             Err(e) => assert_eq!(e, "Incorrect RequestCurrentSource command 11."),
         }
@@ -770,14 +752,14 @@ mod tests {
 
     #[test]
     fn set_zone_2_source_using_rc5() {
-        let mut amp_state = AmpState::default();
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].source.get(), Source::FollowZone1);
+        let amp_state_ptr = Rc::new(RefCell::new(AmpState::default()));
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::Two].source.get(), Source::FollowZone1);
         let rc5_data= get_rc5command_data(RC5Command::BD);
         let data = vec![rc5_data.0, rc5_data.1];
         assert_eq!(
-            create_command_response(&Request::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, data.clone()).unwrap(), &mut amp_state, None).unwrap(),
+            create_command_response(&Request::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, data.clone()).unwrap(), amp_state_ptr.clone(), None).unwrap(),
             Response::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, AnswerCode::StatusUpdate, data).unwrap());
-        assert_eq!(amp_state.zones[&ZoneNumber::Two].source.get(), Source::BD);
+        assert_eq!(amp_state_ptr.borrow().zones[&ZoneNumber::Two].source.get(), Source::BD);
     }
 
 }
