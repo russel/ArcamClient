@@ -22,20 +22,19 @@
       <object class="GtkBox">
         <property name="visible">True</property>
         <property name="can_focus">False</property>
+        <property name="margin_left">10</property>
+        <property name="margin_right">10</property>
         <property name="orientation">vertical</property>
         <child>
           <object class="GtkBox">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="margin_left">10</property>
-            <property name="margin_right">10</property>
             <property name="margin_top">10</property>
             <property name="margin_bottom">10</property>
             <child>
               <object class="GtkLabel">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="margin_left">10</property>
                 <property name="margin_right">10</property>
                 <property name="label" translatable="yes">AVR Amplifier Address</property>
                 <attributes>
@@ -53,7 +52,6 @@
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="margin_left">10</property>
-                <property name="margin_right">10</property>
               </object>
               <packing>
                 <property name="expand">True</property>
@@ -121,6 +119,7 @@
             <property name="height_request">4</property>
             <property name="visible">True</property>
             <property name="can_focus">False</property>
+            <property name="margin_bottom">10</property>
           </object>
           <packing>
             <property name="expand">True</property>
@@ -132,9 +131,6 @@
           <object class="GtkBox">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="margin_left">10</property>
-            <property name="margin_right">10</property>
-            <property name="margin_top">10</property>
             <property name="margin_bottom">10</property>
             <child>
               <object class="GtkBox">
@@ -179,7 +175,6 @@
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="halign">end</property>
-                    <property name="active">0</property>
                     <items>
                       <item id="Off" translatable="yes">Off</item>
                       <item id="Level1" translatable="yes">Level 1</item>
@@ -223,6 +218,7 @@
             <property name="height_request">4</property>
             <property name="visible">True</property>
             <property name="can_focus">False</property>
+            <property name="margin_bottom">10</property>
           </object>
           <packing>
             <property name="expand">True</property>
@@ -234,9 +230,6 @@
           <object class="GtkBox">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="margin_left">10</property>
-            <property name="margin_right">10</property>
-            <property name="margin_top">10</property>
             <property name="margin_bottom">10</property>
             <child>
               <object class="GtkBox">
@@ -270,7 +263,7 @@
                   <object class="GtkBox">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="margin_bottom">10</property>
+                    <property name="margin_bottom">15</property>
                     <child>
                       <object class="GtkLabel" id="zone_1_power_display">
                         <property name="visible">True</property>
@@ -307,7 +300,7 @@
                   <object class="GtkBox">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="margin_bottom">15</property>
+                    <property name="margin_bottom">10</property>
                     <property name="orientation">vertical</property>
                     <child>
                       <object class="GtkBox">
@@ -432,7 +425,7 @@
                   <object class="GtkBox">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="margin_bottom">15</property>
+                    <property name="margin_bottom">10</property>
                     <child>
                       <object class="GtkLabel">
                         <property name="visible">True</property>
@@ -456,7 +449,7 @@
                         <property name="margin_left">10</property>
                         <property name="margin_right">10</property>
                         <property name="justify">center</property>
-                        <property name="width_chars">24</property>
+                        <property name="width_chars">14</property>
                       </object>
                       <packing>
                         <property name="expand">True</property>
@@ -478,7 +471,7 @@
                           <item id="VCR" translatable="yes">VCR</item>
                           <item id="AUX" translatable="yes">AUX</item>
                           <item id="DISPLAY" translatable="yes">DISPLAY</item>
-                          <item id="TUNER" translatable="yes">TUNER</item>
+                          <item id="TUNER" translatable="yes">TUNER FM/DAB</item>
                           <item id="NET" translatable="yes">NET</item>
                           <item id="USB" translatable="yes">USB</item>
                           <item id="STB" translatable="yes">STB</item>
@@ -629,6 +622,8 @@
                 <property name="width_request">4</property>
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
+                <property name="margin_left">10</property>
+                <property name="margin_right">10</property>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -648,13 +643,14 @@
                   <object class="GtkLabel">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="margin_top">10</property>
-                    <property name="margin_bottom">10</property>
+                    <property name="margin_top">15</property>
+                    <property name="margin_bottom">15</property>
                     <property name="label" translatable="yes">Zone 2</property>
                     <property name="justify">fill</property>
                     <attributes>
                       <attribute name="style" value="italic"/>
                       <attribute name="weight" value="bold"/>
+                      <attribute name="scale" value="1.5"/>
                     </attributes>
                   </object>
                   <packing>
@@ -667,7 +663,7 @@
                   <object class="GtkBox">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="margin_bottom">10</property>
+                    <property name="margin_bottom">15</property>
                     <child>
                       <object class="GtkLabel" id="zone_2_power_display">
                         <property name="visible">True</property>
@@ -778,7 +774,7 @@
                   <object class="GtkBox">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="margin_bottom">10</property>
+                    <property name="margin_bottom">15</property>
                     <child>
                       <object class="GtkLabel">
                         <property name="visible">True</property>
@@ -868,6 +864,7 @@
                         <property name="can_focus">False</property>
                         <property name="halign">end</property>
                         <items>
+                          <item id="FollowZone1" translatable="yes">FollowZone1</item>
                           <item id="CD" translatable="yes">CD</item>
                           <item id="BD" translatable="yes">BD</item>
                           <item id="AV" translatable="yes">AV</item>
@@ -876,12 +873,11 @@
                           <item id="VCR" translatable="yes">VCR</item>
                           <item id="AUX" translatable="yes">AUX</item>
                           <item id="DISPLAY" translatable="yes">DISPLAY</item>
-                          <item id="TUNER" translatable="yes">TUNER</item>
+                          <item id="TUNER" translatable="yes">TUNER FM/DAB</item>
                           <item id="NET" translatable="yes">NET</item>
                           <item id="USB" translatable="yes">USB</item>
                           <item id="STB" translatable="yes">STB</item>
                           <item id="GAME" translatable="yes">GAME</item>
-                          <item id="FollowZone1" translatable="yes">FollowZone1</item>
                         </items>
                       </object>
                       <packing>
@@ -1015,17 +1011,7 @@
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkLabel">
-                    <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="width_chars">40</property>
-                    <property name="max_width_chars">40</property>
-                  </object>
-                  <packing>
-                    <property name="expand">True</property>
-                    <property name="fill">True</property>
-                    <property name="position">6</property>
-                  </packing>
+                  <placeholder/>
                 </child>
               </object>
               <packing>
