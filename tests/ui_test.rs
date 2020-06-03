@@ -30,7 +30,7 @@ use futures;
 use futures::StreamExt;
 
 use arcamclient::arcam_protocol::{
-    AnswerCode, Command, Source, RC5Command, Request, ZoneNumber,
+    AnswerCode, Brightness, Command, Source, RC5Command, Request, ZoneNumber,
     REQUEST_QUERY,
     get_rc5command_data,
 };
@@ -68,11 +68,50 @@ fn ui_test() {
             let c_w = control_window.clone();
             async move {
 
-                // This should trigger a change to a volume ScrollButton and therefore
-                // send a message to the amp.
+                // Set the amplifier display brightness.
+                /*
+                c_w.set_brightness_chooser(Brightness::Level1);
+                match rx_queue.next().await {
+                    Some(s) => assert_eq!(s, Request::new(ZoneNumber::One, Command::DisplayBrightness, vec![Brightness::Level1 as u8]).unwrap().to_bytes()),
+                    None => assert!(false, "Failed to get a value from the request queue."),
+                };
+                */
+
+                // Set the Zone 1 volume.
                 c_w.set_volume_chooser(ZoneNumber::One, 20.0);
                 match rx_queue.next().await {
                     Some(s) => assert_eq!(s, Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![0x14]).unwrap().to_bytes()),
+                    None => assert!(false, "Failed to get a value from the request queue."),
+                };
+
+                // Set the Zone 2 volume.
+                c_w.set_volume_chooser(ZoneNumber::Two, 15.0);
+                match rx_queue.next().await {
+                    Some(s) => assert_eq!(s, Request::new(ZoneNumber::Two, Command::SetRequestVolume, vec![0x0f]).unwrap().to_bytes()),
+                    None => assert!(false, "Failed to get a value from the request queue."),
+                };
+
+                // Set Zone 1 to Radio and then to BD
+                c_w.set_source_chooser(ZoneNumber::One, Source::TUNER);  // Can never choose Source::TUNERDAB.
+                let rc5_command = get_rc5command_data(RC5Command::Radio);
+                let rc5_data = vec![rc5_command.0, rc5_command.1];
+                match rx_queue.next().await {
+                    Some(s) => assert_eq!(s, Request::new(ZoneNumber::One, Command::SimulateRC5IRCommand, rc5_data).unwrap().to_bytes()),
+                    None => assert!(false, "Failed to get a value from the request queue."),
+                };
+                match rx_queue.next().await {
+                    Some(s) => assert_eq!(s, Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap().to_bytes()),
+                    None => assert!(false, "Failed to get a value from the request queue."),
+                };
+                c_w.set_source_chooser(ZoneNumber::One, Source::BD);
+                let rc5_command = get_rc5command_data(RC5Command::BD);
+                let rc5_data = vec![rc5_command.0, rc5_command.1];
+                match rx_queue.next().await {
+                    Some(s) => assert_eq!(s, Request::new(ZoneNumber::One, Command::SimulateRC5IRCommand, rc5_data).unwrap().to_bytes()),
+                    None => assert!(false, "Failed to get a value from the request queue."),
+                };
+                match rx_queue.next().await {
+                    Some(s) => assert_eq!(s, Request::new(ZoneNumber::One, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap().to_bytes()),
                     None => assert!(false, "Failed to get a value from the request queue."),
                 };
 
@@ -84,12 +123,10 @@ fn ui_test() {
                     Some(s) => assert_eq!(s, Request::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, rc5_data).unwrap().to_bytes()),
                     None => assert!(false, "Failed to get a value from the request queue."),
                 };
-
                 match rx_queue.next().await {
                     Some(s) => assert_eq!(s, Request::new(ZoneNumber::Two, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap().to_bytes()),
                     None => assert!(false, "Failed to get a value from the request queue."),
                 };
-
                 c_w.set_source_chooser(ZoneNumber::Two, Source::FollowZone1);
                 let rc5_command = get_rc5command_data(RC5Command::SetZone2ToFollowZone1);
                 let rc5_data = vec![rc5_command.0, rc5_command.1];
@@ -97,7 +134,6 @@ fn ui_test() {
                     Some(s) => assert_eq!(s, Request::new(ZoneNumber::Two, Command::SimulateRC5IRCommand, rc5_data).unwrap().to_bytes()),
                     None => assert!(false, "Failed to get a value from the request queue."),
                 };
-
                 match rx_queue.next().await {
                     Some(s) => assert_eq!(s, Request::new(ZoneNumber::Two, Command::RequestCurrentSource, vec![REQUEST_QUERY]).unwrap().to_bytes()),
                     None => assert!(false, "Failed to get a value from the request queue."),
@@ -116,15 +152,9 @@ fn ui_test() {
                 glib::idle_add_local({
                     let aa = a.clone();
                     move || {
-
-                        println!("ZZZZ  Attempt to quit.");
-
                         if glib::MainContext::default().pending() {
                             Continue(true)
                         } else {
-
-                            println!("ZZZZ  Quitting.");
-
                             aa.quit();
                             Continue(false)
                         }
