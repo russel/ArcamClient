@@ -56,6 +56,9 @@ use lazy_static::lazy_static;
 use num_derive::FromPrimitive;  // Apparently unused, but it is necessary.
 use num_traits::FromPrimitive;
 
+use strum;  // Apparently unused, but it is necessary.
+use strum_macros::{Display, EnumString};
+
 /// Zone numbers 1 and 2 for AVR850 but 1, 2, and 3 for AVR600.
 #[derive(Clone, Copy, Debug, Eq, FromPrimitive, Hash, PartialEq)]
 #[repr(u8)]
@@ -543,7 +546,7 @@ pub enum AnswerCode {
 }
 
 /// The three levels of brightness of the amplifier display.
-#[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
+#[derive(Clone, Copy, Debug, Display, EnumString, Eq, FromPrimitive, PartialEq)]
 #[repr(u8)]
 pub enum Brightness {
     Off = 0,
@@ -551,31 +554,10 @@ pub enum Brightness {
     Level2 = 2,
 }
 
-impl ToString for Brightness {
-    fn to_string(&self) -> String {
-        match self {
-            Brightness::Off => "Off".to_string(),
-            Brightness::Level1 => "Level1".to_string(),
-            Brightness::Level2 => "Level2".to_string(),
-        }
-    }
-}
-
-impl From<&str> for Brightness {
-    fn from(s: &str) -> Self {
-        match s {
-            "Off" => Brightness::Off,
-            "Level1" => Brightness::Level1,
-            "Level2" => Brightness::Level2,
-            x => panic!("Illegal brightness value from display – {}", x),
-        }
-    }
-}
-
 /// The various sources the amplifier can use.
 ///
 /// Numeric representation as per the `RequestCurrentSource` [Command](enum.Command.html) return value.
-#[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
+#[derive(Clone, Copy, Debug, Display, EnumString, Eq, FromPrimitive, PartialEq)]
 #[repr(u8)]
 pub enum Source {
     FollowZone1 = 0x00,
@@ -593,29 +575,6 @@ pub enum Source {
     USB = 0x0F,
     STB = 0x10,
     GAME = 0x11,
-}
-
-impl From<&str> for Source {
-    fn from(s: &str) -> Self {
-        match s {
-            "FollowZone1" => Source::FollowZone1,
-            "CD" => Source::CD,
-            "BD" => Source::BD,
-            "AV" => Source::AV,
-            "SAT" => Source::SAT,
-            "PVR" => Source::PVR,
-            "VCR" => Source::VCR,
-            "AUX" => Source::AUX,
-            "DISPLAY" => Source::DISPLAY,
-            "TUNER" => Source::TUNER,  // TUNER (FM) according to the documentation.
-            "TUNERDAB" => Source::TUNERDAB,  // (AVR450/750 only) according to the documentation.
-            "NET" => Source::NET,
-            "USB" => Source::USB,
-            "STB" => Source::STB,
-            "GAME" => Source::GAME,
-            x => panic!("Illegal source value {}.", x),
-        }
-    }
 }
 
 /// The video sources.
@@ -637,30 +596,11 @@ pub enum VideoSource {
 ///
 /// Numeric representation as per `Power` [Command](enum.Command.html) return value.
 /// The UI needs a string representation and this avoids spelling errors.
-#[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
+#[derive(Clone, Copy, Debug, Display, EnumString, Eq, FromPrimitive, PartialEq)]
 #[repr(u8)]
 pub enum PowerState {
     Standby = 0x00,
     On = 0x01,
-}
-
-impl ToString for PowerState {
-    fn to_string(&self) -> String {
-        match self {
-            Self::Standby => "Standby".to_string(),
-            Self::On => "On".to_string(),
-        }
-    }
-}
-
-impl From<&str> for PowerState {
-    fn from(s: &str) -> Self {
-        match s {
-            "Standby" => Self::Standby,
-            "On" => Self::On,
-            x => panic!("Illegal PowerState value, {}", x),
-        }
-    }
 }
 
 impl From<bool> for PowerState {
@@ -685,30 +625,11 @@ impl From<PowerState> for bool {
 ///
 /// Numeric representation as per the `RequestMuteState` [Command](enum.Command.html) return value.
 /// The UI needs a string representation and this avoids spelling errors.
-#[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
+#[derive(Clone, Copy, Debug, Display, EnumString, Eq, FromPrimitive, PartialEq)]
 #[repr(u8)]
 pub enum MuteState {
     Muted = 0x00,
     NotMuted = 0x01,
-}
-
-impl ToString for MuteState {
-    fn to_string(&self) -> String {
-        match self {
-            Self::NotMuted => "Not Muted".to_string(),
-            Self::Muted => "Muted".to_string(),
-        }
-    }
-}
-
-impl From<&str> for MuteState {
-    fn from(s: &str) -> Self {
-        match s {
-            "Muted" => Self::Muted,
-            "Not Muted" => Self::NotMuted,
-            x => panic!("Illegal MuteState value, {}", x),
-        }
-    }
 }
 
 impl From<bool> for MuteState {

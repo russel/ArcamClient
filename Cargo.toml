@@ -10,7 +10,6 @@ readme = "README.md"
 edition = "2018"
 
 [dependencies]
-async-std = "*"
 ctor = "*"
 env_logger = "*"
 futures = "*"
@@ -29,6 +28,8 @@ log = "*"
 num-traits = "*"
 num-derive = "*"
 rand = "*"
+strum = "*"
+strum_macros = "*"
 
 [dev-dependencies]
 #quickcheck = "*"

@@ -22,6 +22,7 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::str::FromStr;
 
 use gio;
 use gio::prelude::*;
@@ -363,7 +364,7 @@ impl ControlWindow {
             let c_w = control_window.clone();
             move |cbt| {
                 if c_w.is_connected() {
-                    functionality::set_source_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::One, Source::from(cbt.get_active_id().unwrap().as_ref()));
+                    functionality::set_source_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::One, Source::from_str(cbt.get_active_id().unwrap().as_ref()).unwrap());
                 }
             }
         });
@@ -395,7 +396,7 @@ impl ControlWindow {
             let c_w = control_window.clone();
             move |cbt| {
                 if c_w.is_connected() {
-                    functionality::set_source_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::Two, Source::from(cbt.get_active_id().unwrap().as_ref()));
+                    functionality::set_source_on_amp(&mut c_w.get_to_comms_manager(), ZoneNumber::Two, Source::from_str(cbt.get_active_id().unwrap().as_ref()).unwrap());
                 }
             }
         });
@@ -421,7 +422,8 @@ impl ControlWindow {
     pub fn set_brightness_display(self: &Self, level: Brightness) {
         let brightness_id= level.to_string();
         self.brightness_display.set_text(&brightness_id);
-        if self.brightness_chooser.get_active_id().unwrap() != brightness_id {
+        let id = self.brightness_chooser.get_active_id();
+        if id.is_none() || id.unwrap() != brightness_id {
             self.brightness_chooser.set_active_id(Some(&brightness_id));
         }
     }
@@ -474,7 +476,7 @@ impl ControlWindow {
             ZoneNumber::One => (&self.zone_1_source_display, &self.zone_1_source_chooser, &self.zone_1_radio_data),
             ZoneNumber::Two => (&self.zone_2_source_display, &self.zone_2_source_chooser, &self.zone_2_radio_data),
         };
-        let source_id = format!("{:?}", source);
+        let source_id = source.to_string();
         source_display.set_text(&source_id);
         if source == Source::TUNER { radio_data.show(); }
         else { radio_data.hide(); }
@@ -521,15 +523,15 @@ impl ControlWindow {
 
     /// Accessor for the current value of the brightness display UI component.
     pub fn get_brightness_display_value(self: &Self) -> Brightness {
-        self.brightness_display.get_text().as_str().into()
+        Brightness::from_str(self.brightness_display.get_text().as_str()).unwrap()
     }
 
     /// Accessor for the current value of the zone specific power display UI component.
     pub fn get_power_display_value(self: &Self, zone: ZoneNumber) -> PowerState {
-        match zone {
+        PowerState::from_str(match zone {
             ZoneNumber::One => self.zone_1_power_display.get_text(),
             ZoneNumber::Two => self.zone_2_power_display.get_text(),
-        }.as_str().into()
+        }.as_str()).unwrap()
     }
 
     /// Accessor for the current value of the zone specific volume display UI component.
@@ -545,18 +547,18 @@ impl ControlWindow {
 
     /// Accessor for the current value of the zone specific mute display UI component.
     pub fn get_mute_display_value(self: &Self, zone: ZoneNumber) -> MuteState {
-        match zone {
+        MuteState::from_str(match zone {
             ZoneNumber::One => self.zone_1_mute_display.get_text(),
             ZoneNumber::Two => self.zone_2_mute_display.get_text(),
-        }.as_str().into()
+        }.as_str()).unwrap()
     }
 
     /// Accessor for the current value of the zone specific source display UI component.
     pub fn get_source_display_value(self: &Self, zone: ZoneNumber) -> Source {
-        match zone {
+        Source::from_str(match zone {
             ZoneNumber::One => &self.zone_1_source_display,
             ZoneNumber::Two => &self.zone_2_source_display,
-        }.get_text().as_str().into()
+        }.get_text().as_str()).unwrap()
     }
 
     /// Accessor for whether the client is connected to an amplifier – real or mock.
@@ -599,6 +601,11 @@ impl ControlWindow {
     }
 
     #[doc(hidden)]
+    pub fn set_brightness_chooser(self: &Self, brightness: Brightness) {
+        self.brightness_chooser.set_active_id(Some(&brightness.to_string()));
+    }
+
+    #[doc(hidden)]
     pub fn set_power_chooser(self: &Self, zone: ZoneNumber, power: PowerState) {
         match zone {
             ZoneNumber::One => &self.zone_1_power_chooser,
@@ -627,7 +634,7 @@ impl ControlWindow {
         match zone {
             ZoneNumber::One => &self.zone_1_source_chooser,
             ZoneNumber::Two => &self.zone_2_source_chooser,
-        }.set_active_id(Some(&format!("{:?}", source)));
+        }.set_active_id(Some(&source.to_string()));
     }
 
 }
