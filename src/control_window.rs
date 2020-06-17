@@ -131,7 +131,7 @@ impl ControlWindow {
     /// sets up all the event handlers for the events associates with the control
     /// UI components.
     pub fn new(application: &gtk::Application, port_number: Option<u16>) -> Rc<Self> {
-        let builder = gtk::Builder::new_from_string(include_str!("resources/arcamclient.glade"));
+        let builder = gtk::Builder::from_string(include_str!("resources/arcamclient.glade"));
         let window: gtk::ApplicationWindow = builder.get_object("application_window").unwrap();
         window.set_application(Some(application));
         window.connect_delete_event({
@@ -146,9 +146,9 @@ impl ControlWindow {
         header_bar.set_show_close_button(true);
         header_bar.show();
         let menu_button = gtk::MenuButton::new();
-        menu_button.set_image(Some(&gtk::Image::new_from_icon_name(Some("open-menu-symbolic"), gtk::IconSize::Button.into())));
+        menu_button.set_image(Some(&gtk::Image::from_icon_name(Some("open-menu-symbolic"), gtk::IconSize::Button.into())));
         menu_button.show();
-        let menu_builder = gtk::Builder::new_from_string(include_str!("resources/application_menu.xml"));
+        let menu_builder = gtk::Builder::from_string(include_str!("resources/application_menu.xml"));
         let application_menu: gio::Menu = menu_builder.get_object("application_menu").unwrap();
         let about_action = gio::SimpleAction::new("about", None);
         about_action.connect_activate({
