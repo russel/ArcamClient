@@ -12,10 +12,10 @@ GitLab: [![GitLab build status](https://gitlab.com/Russel/arcam-client/badges/ma
 ## Background
 
 This work was started using an AVR600, but stalled when it appeared that my AVR600 was not behaving as the
-manual stated it should.  The project went into hiatus when Arcam admitted the system of controlling the
+manual stated it should. The project went into hiatus when Arcam admitted the system of controlling the
 amplifier over a TCP connection on an AVR600 did not work. When my AVR600 broke (again), rather than get it
 repaired (again), I decided to replace it with an AVR850. Since the TCP connection based control system
-works on this amplifier, work on this application has restarted.
+works on this amplifier, work on this application restarted.
 
 ## AVR and Ethernet
 
@@ -26,6 +26,14 @@ present in the AVR850.
 On the AVR600 port 50001 was a TCP server socket that allows the IR controller / RS232 controller protocols to
 be used over Ethernet. On the AVR850 the port has been changed to 50000.
 
+## Acknowledgements
+
+This project benefits from support by [JetBrains](https://www.jetbrains.com); JetBrains provide
+a licence for [CLion](https://www.jetbrains.com/clion/). Although CLion is ostensibly a C and
+C++ IDE, there is [IntelliJ Rust](https://intellij-rust.github.io/) which makes CLion an
+excellent IDE for [Rust](https://www.rust-lang.org/) code development.
+
 ## Licence
 
-This code is licenced under GPLv3. [![Licence](https://img.shields.io/badge/license-GPL_3-green.svg)](https://www.gnu.org/licenses/gpl-3.0.txt)
+This code is licenced under GPLv3.
+[![Licence](https://img.shields.io/badge/license-GPL_3-green.svg)](https://www.gnu.org/licenses/gpl-3.0.txt)
