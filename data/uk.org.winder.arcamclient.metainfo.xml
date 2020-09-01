@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Russel Winder 2020 <russel@winder.org.uk> -->
+<component type="desktop-application">
+  <id>uk.org.russel.arcamclient</id>
+  <metadata_license>CC0</metadata_license>
+  <project_license>GPL-3.0+</project_license>
+  <name>ArcamClient</name>
+  <summary>A GUI for controlling Arcam amps over Ethernet</summary>
+  <description>
+    <p>A GUI for controlling Arcam amps over Ethernet</p>
+  </description>
+  <!-- screenshots>
+    <screenshot type="default">
+      <image>https://github.com/Me-TV/Me-TV/raw/master/data/screenshots/bbc_news.png</image>
+      <caption>Main Window with a Channel Window</caption>
+    </screenshot>
+  </screenshots -->
+  <url type="homepage">https://gitlab.com/Russel/arcam-client</url>
+  <content_rating type="oars-1.0" />
+  <!-- releases>
+    <release version="0.0.0" date="2020-08-30">
+      <description>
+        <p>ArcamClient 0.0.0</p>
+      </description>
+    </release>
+  </releases -->
+  <kudos>
+    <kudo>ModernToolkit</kudo>
+    <kudo>UserDocs</kudo>
+  </kudos>
+  <developer_name>Russel Winder</developer_name>
+  <update_contact>russel@winder.org.uk</update_contact>
+
+  <launchable type="desktop-id">uk.org.winder.arcamclient.desktop</launchable>
+</component>

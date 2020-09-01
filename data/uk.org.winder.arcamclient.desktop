@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=ArcamClient
+Comment=A GUI to control an Arcam amp over Ethernet
+Type=Application
+Encoding=UTF-8
+Exec=arcamclient
+Icon=uk.org.winder.arcamclient
+Terminal=false
+StartupNotify=true
+Categories=AudioVideo;GTK;
+MimeType=video/mpeg;audio/x-mpeg;video/x-mpeg;
