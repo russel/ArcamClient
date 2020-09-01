@@ -53,10 +53,10 @@ use std::fmt;
 
 use lazy_static::lazy_static;
 
-use num_derive::FromPrimitive;  // Apparently unused, but it is necessary.
+#[allow(unused_imports)]  // Compiler misses the use in a derive.
+use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
-use strum;  // Apparently unused, but it is necessary.
 use strum_macros::{Display, EnumString};
 
 /// Zone numbers 1 and 2 for AVR850 but 1, 2, and 3 for AVR600.
@@ -437,7 +437,9 @@ impl From<(u8, u8)> for RC5Command {
             (0x10, 0x11) => RC5Command::DecreaseVolume,
             (0x10, 0x29) => RC5Command::Red,
             (0x10, 0x2a) => RC5Command::Green,
+            #[allow(unreachable_patterns)]
             (0x10, 0x2b) => RC5Command::Yellow, // Repeat use of value by HOME.
+            #[allow(unreachable_patterns)]
             (0x10, 0x37) => RC5Command::Blue, // Repeat use of value by CycleBetweenVFDInformationPanels.
             (0x10, 0x5b) => RC5Command::Radio,
             (0x10, 0x63) => RC5Command::Aux,
@@ -905,7 +907,7 @@ mod tests {
 
     #[test]
     fn parse_valid_set_volume_request() {
-        let mut request = Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![20]).unwrap();
+        let request = Request::new(ZoneNumber::One, Command::SetRequestVolume, vec![20]).unwrap();
         assert_eq!(Request::parse_bytes(&request.to_bytes()).unwrap(), (request, 6));
     }
 

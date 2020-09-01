@@ -40,10 +40,10 @@ fn create() -> gtk::AboutDialog {
     let about = gtk::AboutDialog::new();
     let mut authors = Vec::<&str>::new();
     authors.push("Russel Winder <russel@winder.org.uk>");
-    let mut documentors = Vec::<&str>::new();
     about.set_authors(&authors);
-    about.set_comments(Some("A GTK+-based client for Arcam amplifiers."));
+    about.set_comments(Some("A GTK+-based desktop client for Arcam amplifiers."));
     about.set_copyright(Some("Copyright © 2020  Russel Winder <russel@winder.org.uk>"));
+    let /* mut */ documentors = Vec::<&str>::new();
     about.set_documenters(&documentors);
     about.set_license(Some("This program is licenced under GNU General Public Licence (GPL) version 3."));
     let loader = PixbufLoader::new();

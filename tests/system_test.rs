@@ -20,20 +20,13 @@
 // Need to start a mock AVR850.
 mod start_avr850;
 
-use std::rc::Rc;
-
 use gio;
 use gio::prelude::*;
 use gtk;
-use gtk::prelude::*;
+//use gtk::prelude::*;
 
-use futures;
-use futures::StreamExt;
-
-use arcamclient::arcam_protocol::{AnswerCode, Brightness, Command, MuteState, PowerState, Source, ZoneNumber};
-use arcamclient::comms_manager;
+use arcamclient::arcam_protocol::{Brightness, MuteState, PowerState, Source, ZoneNumber};
 use arcamclient::control_window::{ConnectedState, ControlWindow};
-use arcamclient::functionality;
 
 use start_avr850::PORT_NUMBER;
 

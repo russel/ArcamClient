@@ -114,7 +114,7 @@ fn send_multi_packet_message() {
                     data = &data[count..];
                     responses.push(response);
                 },
-                Err(e) => assert!(false),
+                Err(e) => assert!(false, e),
             }
         }
     }

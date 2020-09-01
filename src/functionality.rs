@@ -41,19 +41,20 @@ use futures::channel::mpsc::Sender;
 
 use log::debug;
 
-use num_derive::FromPrimitive;  // Apparently unused, but it is necessary.
+#[allow(unused_imports)]  // Compiler misses the use in a derive.
+use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
 use crate::arcam_protocol::{
-    AnswerCode, Command, MuteState, PowerState, RC5Command, Request, Response, Source, ZoneNumber,
+    Command, MuteState, PowerState, RC5Command, Request, Response, Source, ZoneNumber,
     REQUEST_QUERY,
     get_rc5command_data
 };
 use crate::comms_manager;
 use crate::control_window::{ControlWindow, ConnectedState};
 
-pub type RequestTuple = (ZoneNumber, Command, Vec<u8>);
-pub type ResponseTuple = (ZoneNumber, Command, AnswerCode, Vec<u8>);
+//pub type RequestTuple = (ZoneNumber, Command, Vec<u8>);
+//pub type ResponseTuple = (ZoneNumber, Command, AnswerCode, Vec<u8>);
 
 /// Connect to an Arcam amp at the address given.
 pub fn connect_to_amp(

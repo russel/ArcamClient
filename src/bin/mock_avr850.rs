@@ -81,7 +81,6 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::env::args;
 use std::rc::Rc;
-use std::sync::Mutex;
 use std::time::SystemTime;
 
 use log::debug;
@@ -145,7 +144,7 @@ impl Default for AmpState {
 
 /// Return a response to a given request updating the state of the mock amp as needed.
 fn create_command_response(request: &Request, amp_state_ptr: Rc<RefCell<AmpState>>, sender: Option<futures::channel::mpsc::Sender<Vec<u8>>>) -> Result<Response, String>{
-    let mut amp_state = amp_state_ptr.borrow_mut();
+    let amp_state = amp_state_ptr.borrow_mut();
     match request.cc {
         Command::Power => {
             assert_eq!(request.data.len(), 1);

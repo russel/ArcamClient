@@ -19,24 +19,19 @@
 
 // Do not need to start a mock AVR850 for this test.
 
-use std::rc::Rc;
-
 use gio;
 use gio::prelude::*;
 use gtk;
-use gtk::prelude::*;
 
 use futures;
 use futures::StreamExt;
 
 use arcamclient::arcam_protocol::{
-    AnswerCode, Brightness, Command, Source, RC5Command, Request, ZoneNumber,
+    Command, Source, RC5Command, Request, ZoneNumber,
     REQUEST_QUERY,
     get_rc5command_data,
 };
-use arcamclient::comms_manager;
 use arcamclient::control_window;
-use arcamclient::functionality;
 
 // GTK+ is not thread safe and starting an application requires access to the default
 // context. This means we cannot run multiple Rust tests since they are multi-threaded.

@@ -20,13 +20,10 @@
 // Need to start a mock AVR850.
 mod start_avr850;
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use gio;
 use gio::prelude::*;
+#[cfg(not(test))]
 use gtk;
-use gtk::prelude::*;
 
 use futures;
 use futures::channel::mpsc::{Sender, Receiver};
@@ -38,9 +35,7 @@ use arcamclient::arcam_protocol::{
     get_rc5command_data
 };
 use arcamclient::comms_manager;
-use arcamclient::control_window::ControlWindow;
 use arcamclient::functionality::{
-    ResponseTuple,
     get_brightness_from_amp, get_source_from_amp, send_request_bytes, set_volume_on_amp, set_source_on_amp,
 };
 
@@ -70,7 +65,7 @@ fn communications_test() {
     });
     let mut sender = match comms_manager::connect_to_amp( &tx_from_comms_manager, "127.0.0.1", unsafe { PORT_NUMBER }) {
         Ok(s) => s,
-        Err(e) => panic!("~~~~ communications_test: failed to connect to the mock amp."),
+        Err(e) => panic!("~~~~ communications_test: failed to connect to the mock amp – {}", e),
     };
 
     async fn test_code(mut sender: Sender<Vec<u8>>, mut receiver: Receiver<Vec<u8>>) {

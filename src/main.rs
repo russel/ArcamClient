@@ -17,11 +17,14 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#[cfg(not(test))]
 use gio;
+#[cfg(not(test))]
 use gio::prelude::*;
+#[cfg(not(test))]
 use gtk;
-// use gtk::prelude::*;
 
+#[cfg(not(test))]
 use env_logger;
 
 mod about;
