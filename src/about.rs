@@ -48,7 +48,7 @@ fn create() -> gtk::AboutDialog {
     about.set_license(Some("This program is licenced under GNU General Public Licence (GPL) version 3."));
     let loader = PixbufLoader::new();
     loader.set_size(175, 90);
-    loader.write(include_bytes!("resources/arcamclient.svg")).unwrap();
+    loader.write(include_bytes!("resources/uk.org.winder.arcamclient.svg")).unwrap();
     loader.close().unwrap();
     let image = loader.get_pixbuf().unwrap();
     about.set_logo(Some(&image));
