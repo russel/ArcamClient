@@ -20,6 +20,8 @@
 // Need to start a mock AVR850.
 mod start_avr850;
 
+use std::time::Duration;
+
 use gio;
 use gio::prelude::*;
 use gtk;
@@ -48,7 +50,7 @@ fn system_test() {
         // Have to wait for long enough for all the activity of initialising to settle.
         // 2 s seems insufficient. 2.25 s works locally, but fails on GitLab and Travis-CI.
         // 2.5 s had worked on GitLab, but has now failed.
-        glib::timeout_add_local(3000, {
+        glib::timeout_add_local(Duration::from_millis(3000), {
             let a = app.clone();
             let c_w = control_window.clone();
             move ||{
@@ -67,12 +69,12 @@ fn system_test() {
 
                 // Set Zone 2 to CD and then to FollowZone1
                 c_w.set_source_chooser(ZoneNumber::Two, Source::CD);
-                glib::timeout_add_local(50, {
+                glib::timeout_add_local(Duration::from_millis(50), {
                     let cw = c_w.clone();
                     move || {
                         assert_eq!(cw.get_source_display_value(ZoneNumber::Two), Source::CD);
                         cw.set_source_chooser(ZoneNumber::Two, Source::FollowZone1);
-                        glib::timeout_add_local(50, {
+                        glib::timeout_add_local(Duration::from_millis(50), {
                             let c = cw.clone();
                             move || {
                                 assert_eq!(c.get_source_display_value(ZoneNumber::Two), Source::FollowZone1);
@@ -84,7 +86,7 @@ fn system_test() {
                 });
 
                 // Add the application quit event once there is no other event.
-                glib::timeout_add_local(500, {
+                glib::timeout_add_local(Duration::from_millis(500), {
                     let aa = a.clone();
                     move || {
                         if glib::MainContext::default().pending() {

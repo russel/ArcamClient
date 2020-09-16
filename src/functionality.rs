@@ -33,6 +33,7 @@
 //! is all about class structures in an object oriented system.
 
 use std::rc::Rc;
+use std::time::Duration;
 
 use gtk;
 use gtk::prelude::*;
@@ -198,7 +199,7 @@ pub fn set_source_on_amp(sender: &mut Sender<Vec<u8>>, zone: ZoneNumber, source:
 // than guesswork: 150 ms seems insufficient, 175 ms works sometimes, 200 ms seems
 // mostly to work but not always, 225 ms seems to work always.
 pub fn initialise_control_window(sender: &mut Sender<Vec<u8>>) {
-    glib::timeout_add_local(225, {
+    glib::timeout_add_local(Duration::from_millis(225), {
         let mut s = sender.clone();
         let mut count = -1;
         move || {
