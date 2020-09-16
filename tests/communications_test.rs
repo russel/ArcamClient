@@ -54,7 +54,7 @@ fn communications_test() {
     context.push_thread_default();
 
     // Set up connection to the mock AVR850 process.
-    let (mut tx_queue, mut rx_queue) = futures::channel::mpsc::channel(10);
+    let (mut tx_queue, rx_queue) = futures::channel::mpsc::channel(10);
     let (tx_from_comms_manager, rx_from_comms_manager) = glib::MainContext::channel(glib::source::PRIORITY_DEFAULT);
     rx_from_comms_manager.attach(None, move |datum| {
         match tx_queue.try_send(datum) {
