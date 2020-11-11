@@ -22,8 +22,6 @@ mod start_avr850;
 
 use gio;
 use gio::prelude::*;
-#[cfg(not(test))]
-use gtk;
 
 use futures;
 use futures::channel::mpsc::{Sender, Receiver};
@@ -41,7 +39,7 @@ use arcamclient::functionality::{
 
 use start_avr850::PORT_NUMBER;
 
-// GTK+ is not thread safe and starting an application requires access to the default
+// GTK is not thread safe and starting an application requires access to the default
 // context. This means we cannot run multiple Rust tests since they are multi-threaded.
 // It is possible to run the tests single threaded, but that runs into problems. All in
 // all it seems best to run all the tests within a single application. Messy as it means
