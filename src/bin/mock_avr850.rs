@@ -428,7 +428,7 @@ async fn process_connection(connection: SocketConnection, amp_state_ptr: Rc<RefC
 /// connection looks like a connection to a different mock AVR850.
 async fn run_connection_listener(port_number: u16) {
     let server = SocketListener::new();
-    let address = gio::InetSocketAddress::new(&gio::InetAddress::from_string("127.0.0.1"), port_number);
+    let address = gio::InetSocketAddress::new(&gio::InetAddress::from_string("127.0.0.1").unwrap(), port_number);
     server.add_address(&address, gio::SocketType::Stream, gio::SocketProtocol::Tcp, None::<&glib::Object>).expect("Failed to bind to address.");
     debug!("run_connection_listener: Listening on {}", &create_string_for_inetsocketaddress(&address));
     let mut incoming = server.incoming();
